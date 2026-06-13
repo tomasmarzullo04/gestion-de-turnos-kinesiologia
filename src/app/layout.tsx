@@ -1,10 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
+// Body: Inter (sans humanista, legible). Títulos: Geist (display) → expone
+// la variable --font-geist-sans, usada por h1–h4 y la familia `font-display`.
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
@@ -35,7 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es-AR" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans`}>
+      <body className={`${inter.variable} ${GeistSans.variable} font-sans`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

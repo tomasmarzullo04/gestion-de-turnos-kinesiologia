@@ -32,7 +32,14 @@ export function AppointmentCard({
   const end = new Date(appointment.endsAtISO);
 
   return (
-    <Card className={cn(muted && "opacity-75")}>
+    <Card
+      className={cn(
+        "transition-all duration-200 ease-out-soft",
+        muted
+          ? "opacity-70"
+          : "hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-e2",
+      )}
+    >
       <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Activity } from "lucide-react";
+
+import { BrandMark } from "@/components/shared/brand-mark";
 
 export default function AuthLayout({
   children,
@@ -9,10 +10,8 @@ export default function AuthLayout({
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="container flex h-16 items-center">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Activity className="h-5 w-5" />
-          </span>
+        <Link href="/" className="flex items-center gap-2 font-display font-semibold tracking-tight">
+          <BrandMark />
           <span className="text-lg">Kiné</span>
         </Link>
       </header>

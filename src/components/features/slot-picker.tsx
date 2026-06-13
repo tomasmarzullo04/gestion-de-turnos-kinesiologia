@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { format } from "date-fns";
-import { CalendarOff, Loader2 } from "lucide-react";
+import { CalendarOff, CalendarSearch, Loader2 } from "lucide-react";
 
 import { Calendar } from "@/components/ui/calendar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { type TimeSlot } from "@/types";
 
@@ -75,9 +76,16 @@ export function SlotPicker({
 
   if (!ready) {
     return (
-      <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Elegí un profesional y un servicio para ver los horarios disponibles.
-      </p>
+      <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-8 text-center">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-foreground">
+          <CalendarSearch className="h-5 w-5" />
+        </span>
+        <p className="text-sm font-medium">Empecemos por lo primero</p>
+        <p className="max-w-xs text-sm text-muted-foreground">
+          Elegí un profesional y un servicio y te mostramos los horarios
+          disponibles al instante.
+        </p>
+      </div>
     );
   }
 
@@ -99,9 +107,16 @@ export function SlotPicker({
             Seleccioná una fecha en el calendario.
           </p>
         ) : loading ? (
-          <div className="flex h-full min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Buscando horarios…
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Buscando horarios…
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-9 w-full rounded-md" />
+              ))}
+            </div>
           </div>
         ) : error ? (
           <p className="rounded-lg border border-dashed p-6 text-center text-sm text-destructive">
@@ -116,19 +131,21 @@ export function SlotPicker({
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {slots.map((slot) => {
+            {slots.map((slot, index) => {
               const selected = value === slot.startsAt;
               return (
                 <button
                   key={slot.startsAt}
                   type="button"
                   onClick={() => onChange(slot.startsAt)}
+                  style={{ animationDelay: `${Math.min(index * 25, 400)}ms` }}
                   className={cn(
-                    "rounded-md border px-2 py-2 text-sm font-medium tabular-nums transition-colors",
+                    "animate-slot-pop rounded-md border px-2 py-2 text-sm font-medium tabular-nums shadow-e1 transition-all duration-150 ease-out-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.97]",
                     selected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "hover:border-primary hover:bg-accent",
+                      ? "border-primary bg-primary text-primary-foreground shadow-e2"
+                      : "border-input hover:-translate-y-px hover:border-primary/50 hover:bg-accent hover:shadow-e2",
                   )}
+                  aria-pressed={selected}
                 >
                   {slot.label}
                 </button>

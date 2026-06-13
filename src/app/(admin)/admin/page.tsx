@@ -37,7 +37,7 @@ export default async function AdminDashboardPage() {
   const today = new Date();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger-children">
       <PageHeader
         title="Dashboard"
         description="Resumen de la actividad de la consultoría."

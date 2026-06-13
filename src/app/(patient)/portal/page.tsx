@@ -52,7 +52,7 @@ export default async function PortalHomePage() {
   const firstName = user.name.split(" ")[0] ?? user.name;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger-children">
       <PageHeader
         title={`Hola, ${firstName} 👋`}
         description="Este es tu portal de turnos."

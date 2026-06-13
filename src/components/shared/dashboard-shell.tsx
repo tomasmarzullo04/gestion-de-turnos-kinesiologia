@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   Briefcase,
   CalendarDays,
   CalendarPlus,
@@ -14,6 +13,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { BrandMark } from "@/components/shared/brand-mark";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { UserMenu } from "@/components/shared/user-menu";
 import { Button } from "@/components/ui/button";
@@ -68,27 +68,36 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
       {/* Sidebar (desktop) */}
       <aside className="hidden w-64 shrink-0 flex-col border-r bg-card lg:flex">
         <div className="flex h-16 items-center gap-2 border-b px-6 font-semibold">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Activity className="h-5 w-5" />
-          </span>
-          <span className="text-lg">Kiné</span>
+          <BrandMark />
+          <span className="font-display text-lg tracking-tight">Kiné</span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                isActive(item.href)
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
+          {nav.map((item) => {
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-out-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                  active
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {/* Indicador activo: barra de acento que crece (CSS, sin dep). */}
+                <span
+                  className={cn(
+                    "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-primary transition-transform duration-200 ease-out-soft",
+                    active ? "scale-y-100" : "scale-y-0",
+                  )}
+                />
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
         <div className="border-t p-4 text-xs text-muted-foreground">
           {role === ROLES.ADMIN ? "Panel de administración" : "Portal del paciente"}
@@ -119,9 +128,9 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
             </DropdownMenu>
             <Link
               href={homeHref}
-              className="flex items-center gap-2 font-semibold lg:hidden"
+              className="flex items-center gap-2 font-display font-semibold tracking-tight lg:hidden"
             >
-              <Activity className="h-5 w-5 text-primary" />
+              <BrandMark className="h-7 w-7" animate={false} />
               Kiné
             </Link>
           </div>

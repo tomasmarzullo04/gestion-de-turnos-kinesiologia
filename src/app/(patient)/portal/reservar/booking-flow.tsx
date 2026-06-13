@@ -2,18 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck } from "lucide-react";
+import { CalendarCheck, Check } from "lucide-react";
 import { toast } from "sonner";
 
 import { bookAppointmentAction } from "@/app/(patient)/actions";
 import { SlotPicker } from "@/components/features/slot-picker";
 import { SubmitButton } from "@/components/shared/submit-button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 interface Option {
   id: string;
@@ -41,6 +37,51 @@ interface Props {
   services: ServiceOption[];
 }
 
+function StepCard({
+  step,
+  title,
+  complete,
+  active,
+  children,
+}: {
+  step: number;
+  title: string;
+  complete: boolean;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card
+      className={cn(
+        "transition-all duration-300 ease-out-soft",
+        active ? "opacity-100" : "pointer-events-none opacity-55",
+      )}
+      aria-disabled={!active}
+    >
+      <CardContent className="space-y-4 p-5 sm:p-6">
+        <div className="flex items-center gap-3">
+          <span
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors duration-200",
+              complete
+                ? "border-primary bg-primary text-primary-foreground"
+                : active
+                  ? "border-primary text-primary"
+                  : "border-border text-muted-foreground",
+            )}
+          >
+            {complete ? <Check className="h-4 w-4" /> : step}
+          </span>
+          <h2 className="font-display text-base font-semibold tracking-tight">
+            {title}
+          </h2>
+        </div>
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function BookingFlow({ professionals, services }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
@@ -49,6 +90,9 @@ export function BookingFlow({ professionals, services }: Props) {
   const [serviceId, setServiceId] = React.useState("");
   const [startsAt, setStartsAt] = React.useState("");
   const [notes, setNotes] = React.useState("");
+
+  const step1Complete = Boolean(professionalId && serviceId);
+  const step2Complete = Boolean(startsAt);
 
   function handleConfirm() {
     if (!professionalId || !serviceId || !startsAt) {
@@ -67,19 +111,15 @@ export function BookingFlow({ professionals, services }: Props) {
         router.push("/portal/turnos");
       } else {
         toast.error(result.error);
-        // Si el horario fue tomado mientras tanto, limpiamos la selección.
         setStartsAt("");
       }
     });
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">1 · Profesional y servicio</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
+    <div className="space-y-4">
+      <StepCard step={1} title="Profesional y servicio" complete={step1Complete} active>
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Profesional</Label>
             <Select
@@ -123,28 +163,30 @@ export function BookingFlow({ professionals, services }: Props) {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </StepCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">2 · Fecha y horario</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <SlotPicker
-            professionalId={professionalId || undefined}
-            serviceId={serviceId || undefined}
-            value={startsAt}
-            onChange={setStartsAt}
-          />
-        </CardContent>
-      </Card>
+      <StepCard
+        step={2}
+        title="Fecha y horario"
+        complete={step2Complete}
+        active={step1Complete}
+      >
+        <SlotPicker
+          professionalId={professionalId || undefined}
+          serviceId={serviceId || undefined}
+          value={startsAt}
+          onChange={setStartsAt}
+        />
+      </StepCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">3 · Confirmar</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <StepCard
+        step={3}
+        title="Confirmar"
+        complete={false}
+        active={step2Complete}
+      >
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label>Notas para el profesional</Label>
             <Textarea
@@ -156,6 +198,7 @@ export function BookingFlow({ professionals, services }: Props) {
           <div className="flex justify-end">
             <SubmitButton
               type="button"
+              size="lg"
               loading={isPending}
               loadingText="Reservando…"
               onClick={handleConfirm}
@@ -165,8 +208,8 @@ export function BookingFlow({ professionals, services }: Props) {
               Confirmar turno
             </SubmitButton>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </StepCard>
     </div>
   );
 }

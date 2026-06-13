@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  Activity,
   CalendarCheck,
   Clock,
   ShieldCheck,
@@ -8,6 +7,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { BrandMark } from "@/components/shared/brand-mark";
 import { Button } from "@/components/ui/button";
 
 const features = [
@@ -42,10 +42,8 @@ export default function HomePage() {
     <div className="flex min-h-dvh flex-col">
       <header className="border-b">
         <div className="container flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Activity className="h-5 w-5" />
-            </span>
+          <Link href="/" className="flex items-center gap-2 font-display font-semibold tracking-tight">
+            <BrandMark />
             <span className="text-lg">Kiné</span>
           </Link>
           <nav className="flex items-center gap-2">
@@ -83,11 +81,11 @@ export default function HomePage() {
         </section>
 
         <section className="border-t bg-muted/30">
-          <div className="container grid gap-6 py-16 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="container grid gap-6 py-16 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
             {features.map((feature) => (
               <div
                 key={feature.title}
-                className="animate-fade-in rounded-xl border bg-card p-6 shadow-sm"
+                className="rounded-xl border bg-card p-6 shadow-e1 transition-all duration-200 ease-out-soft hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-e2"
               >
                 <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <feature.icon className="h-5 w-5" />
