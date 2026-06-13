@@ -1,0 +1,121 @@
+// Prisma schema — Sistema de gestión de turnos de kinesiología.
+//
+// PORTABILIDAD SQLite ⇄ PostgreSQL
+// --------------------------------
+// Para desarrollo local usamos SQLite. Para producción (Vercel + Postgres),
+// solo hay que cambiar `provider = "postgresql"` aquí abajo y apuntar
+// DATABASE_URL a la instancia Postgres; el resto del schema es compatible.
+//
+// IMPORTANTE: NO usamos `enum` de Prisma porque SQLite no los soporta. Los
+// campos de tipo "enum" (role, status, dayOfWeek) se modelan como String y se
+// validan en la capa de aplicación con Zod + tipos de TypeScript
+// (ver src/lib/constants.ts y src/lib/validations).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Usuario del sistema. Puede ser ADMIN (kinesiólogo/recepción) o PATIENT.
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("PATIENT") // "ADMIN" | "PATIENT"
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Turnos reservados por este usuario cuando actúa como paciente.
+  appointments Appointment[] @relation("PatientAppointments")
+
+  // Perfil profesional asociado (opcional) cuando el usuario es un kinesiólogo.
+  professional Professional?
+
+  @@index([role])
+}
+
+/// Profesional (kinesiólogo) con agenda propia. Puede vincularse a un User ADMIN.
+model Professional {
+  id        String   @id @default(cuid())
+  name      String
+  specialty String?
+  bio       String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Vínculo opcional con la cuenta de usuario del profesional.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  availabilities Availability[]
+  appointments   Appointment[]
+
+  @@index([active])
+}
+
+/// Servicio ofrecido (define la duración del turno). Ej: "Sesión RPG 45 min".
+model Service {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  durationMinutes Int
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointments Appointment[]
+
+  @@index([active])
+}
+
+/// Franja horaria laboral semanal de un profesional.
+/// startTime/endTime se guardan como "HH:mm" (hora local de la consultoría).
+model Availability {
+  id        String @id @default(cuid())
+  dayOfWeek Int // 0 = domingo ... 6 = sábado (compatible con date-fns getDay)
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
+
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([professionalId, dayOfWeek, startTime, endTime])
+  @@index([professionalId, dayOfWeek])
+}
+
+/// Turno reservado. startsAt/endsAt se guardan en UTC (DateTime).
+model Appointment {
+  id      String   @id @default(cuid())
+  startsAt DateTime
+  endsAt   DateTime
+  status   String   @default("PENDING") // "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED"
+  notes    String?
+
+  patientId String
+  patient   User   @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
+
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  cancelledAt   DateTime?
+  cancelledBy   String? // userId de quien canceló
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([professionalId, startsAt])
+  @@index([patientId, startsAt])
+  @@index([status])
+}
