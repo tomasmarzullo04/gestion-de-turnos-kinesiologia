@@ -41,7 +41,6 @@ async function getClientIp(): Promise<string> {
   return headerList.get("x-real-ip") ?? "unknown";
 }
 
-const ADMIN_HOME = "/admin";
 const PATIENT_HOME = "/portal";
 
 export async function loginAction(
@@ -148,5 +147,3 @@ export async function registerAction(
 export async function logoutAction(): Promise<void> {
   await signOut({ redirectTo: "/login" });
 }
-
-export { ADMIN_HOME, PATIENT_HOME };
