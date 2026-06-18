@@ -1,7 +1,7 @@
 /**
  * Seed de datos demo (Apex · Entrenamiento).
  *
- * Crea: 1 admin, 1 socio de prueba, el equipo (Tomi y Jeremías Mansilla),
+ * Crea: 1 admin, 1 socio de prueba, el equipo (Jeremías Mansilla y Bautista Calvo),
  * plantillas de horarios del gimnasio (cupo general de 10 por franja) y
  * materializa las franjas de los próximos 30 días.
  *
@@ -61,10 +61,14 @@ async function main() {
 
   // ── Responsables de entrenamiento (equipo) ───────────────────────────────
   // No se asignan a las franjas: el cupo es general del gimnasio. Se muestran
-  // en "Nuestro equipo" y en el ABM del admin.
+  // en "Nuestro equipo" y en el ABM del profesional.
+  // Limpieza de nombres de demo anteriores.
+  await prisma.professional.deleteMany({
+    where: { name: { in: ["Tomi", "Dra. Laura Giménez"] } },
+  });
   const team = [
-    { name: "Tomi", specialty: "Entrenamiento" },
     { name: "Jeremías Mansilla", specialty: "Entrenamiento" },
+    { name: "Bautista Calvo", specialty: "Entrenamiento" },
   ];
   for (const member of team) {
     const existing = await prisma.professional.findFirst({
@@ -72,7 +76,7 @@ async function main() {
     });
     if (!existing) await prisma.professional.create({ data: member });
   }
-  console.log("🏋️  Equipo: Tomi, Jeremías Mansilla.");
+  console.log("🏋️  Equipo: Jeremías Mansilla, Bautista Calvo.");
 
   // ── Plantillas de horarios del gimnasio (cupo general, professional_id NULL) ─
   // Lun–Vie 08:00–21:00 y Sáb 09:00–13:00, capacidad por bloque = CAPACITY.

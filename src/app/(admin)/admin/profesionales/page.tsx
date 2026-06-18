@@ -14,7 +14,7 @@ export default async function ProfessionalsPage() {
     <div>
       <PageHeader
         title="Profesionales"
-        description="Administrá el equipo de profesionales del estudio."
+        description="Gestioná el equipo de profesionales del estudio."
       />
       <ProfessionalsManager
         professionals={professionals.map((p) => ({

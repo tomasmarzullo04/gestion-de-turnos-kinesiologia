@@ -101,7 +101,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
           })}
         </nav>
         <div className="border-t p-4 text-xs text-muted-foreground">
-          {role === ROLES.ADMIN ? "Panel de administración" : "Portal del paciente"}
+          {role === ROLES.ADMIN ? "Panel del profesional" : "Portal del socio"}
         </div>
       </aside>
 
