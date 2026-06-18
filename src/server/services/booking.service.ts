@@ -93,12 +93,16 @@ export const bookingService = {
     }
 
     try {
-      const rows = await prisma.$queryRaw<{ book_slot: string | null }[]>`
-        SELECT book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS book_slot
+      // book_slot devuelve la fila `bookings` (tipo compuesto). La usamos como
+      // fuente de tabla y seleccionamos solo el id (escalar) para que Prisma
+      // pueda deserializarlo.
+      const rows = await prisma.$queryRaw<{ booking_id: string | null }[]>`
+        SELECT b.id AS booking_id
+        FROM book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
       `;
       logger.info("Reserva creada", { slotId, userId });
       return {
-        bookingId: rows[0]?.book_slot ?? null,
+        bookingId: rows[0]?.booking_id ?? null,
         date: slot.date,
         startTime: slot.start_time,
         endTime: slot.end_time,
@@ -142,7 +146,9 @@ export const bookingService = {
     }
 
     try {
-      await prisma.$queryRaw`
+      // $executeRaw no intenta deserializar el resultado (cancel_booking
+      // devuelve la fila bookings / void).
+      await prisma.$executeRaw`
         SELECT cancel_booking(${bookingId}::uuid, ${userId}::text)
       `;
       logger.info("Reserva cancelada", { bookingId, userId, role });
@@ -165,7 +171,7 @@ export const bookingService = {
     }
     const ownerId = rows[0]!.user_id;
     try {
-      await prisma.$queryRaw`
+      await prisma.$executeRaw`
         SELECT cancel_booking(${bookingId}::uuid, ${ownerId}::text)
       `;
       logger.info("Reserva cancelada por admin", { bookingId });
