@@ -28,7 +28,7 @@ export function utcToZoned(date: Date): Date {
  * `day` se interpreta por su parte calendario (año/mes/día) en la TZ local.
  */
 export function combineDateAndTime(day: Date, time: string): Date {
-  const [hours, minutes] = time.split(":").map((n) => Number.parseInt(n, 10));
+  const [hours = 0, minutes = 0] = time.split(":").map((n) => Number.parseInt(n, 10));
   const localWall = new Date(
     day.getFullYear(),
     day.getMonth(),
@@ -43,7 +43,7 @@ export function combineDateAndTime(day: Date, time: string): Date {
 
 /** "HH:mm" → cantidad de minutos desde la medianoche. */
 export function timeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(":").map((n) => Number.parseInt(n, 10));
+  const [hours = 0, minutes = 0] = time.split(":").map((n) => Number.parseInt(n, 10));
   return hours * 60 + minutes;
 }
 

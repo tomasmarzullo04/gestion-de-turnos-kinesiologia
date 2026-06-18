@@ -4,7 +4,6 @@ import { AuthError } from "next-auth";
 import { headers } from "next/headers";
 
 import { signIn, signOut } from "@/lib/auth/auth";
-import { ROLES } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { rateLimit } from "@/lib/rate-limit";
 import {
