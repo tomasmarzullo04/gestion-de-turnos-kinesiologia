@@ -1,23 +1,25 @@
 // Prisma schema — Sistema de gestión de turnos de kinesiología.
 //
-// PORTABILIDAD SQLite ⇄ PostgreSQL
-// --------------------------------
-// Para desarrollo local usamos SQLite. Para producción (Vercel + Postgres),
-// solo hay que cambiar `provider = "postgresql"` aquí abajo y apuntar
-// DATABASE_URL a la instancia Postgres; el resto del schema es compatible.
+// BASE DE DATOS: PostgreSQL (Supabase).
+// --------------------------------------
+// - DATABASE_URL: pooler de transacción de Supabase (puerto 6543, pgbouncer=true).
+//   Lo usa el runtime de la app. En este modo NO hay prepared statements
+//   persistentes; las operaciones atómicas usan $queryRaw/$executeRaw.
+// - DIRECT_URL: pooler de sesión (puerto 5432). Lo usa Prisma para migraciones
+//   e introspección (requiere una conexión directa/de sesión).
 //
-// IMPORTANTE: NO usamos `enum` de Prisma porque SQLite no los soporta. Los
-// campos de tipo "enum" (role, status, dayOfWeek) se modelan como String y se
-// validan en la capa de aplicación con Zod + tipos de TypeScript
-// (ver src/lib/constants.ts y src/lib/validations).
+// NOTA: los campos "enum" (role, status, dayOfWeek) se modelan como String y se
+// validan en la app con Zod + tipos (ver src/lib/constants.ts y validations).
+// Se mantiene así para no acoplar el dominio a enums nativos de la DB.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 /// Usuario del sistema. Puede ser ADMIN (kinesiólogo/recepción) o PATIENT.
