@@ -1,16 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarCheck, CalendarPlus, CalendarX, Clock } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarDays,
+  CalendarPlus,
+  CalendarX,
+  Clock,
+  History,
+  Lightbulb,
+  User,
+} from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type BookingStatus } from "@/lib/booking-config";
 import { requirePatient } from "@/lib/auth/session";
-import { formatDate } from "@/lib/datetime";
-import { parseLocalDateKey } from "@/lib/datetime";
+import { formatDate, formatDateShort, parseLocalDateKey } from "@/lib/datetime";
 import { bookingService } from "@/server/services/booking.service";
 
 export const metadata: Metadata = { title: "Inicio" };
@@ -22,67 +31,159 @@ export default async function PortalHomePage() {
 
   const now = Date.now();
   const next = bookings.find(
-    (b) =>
-      b.status === "CONFIRMED" &&
-      new Date(b.startsAtISO).getTime() >= now,
+    (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() >= now,
   );
+  
+  const pendientes = bookings.filter(
+    (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() >= now,
+  ).length;
+  
+  const realizados = bookings.filter(
+    (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() < now,
+  ).length;
 
   const firstName = user.name.split(" ")[0] ?? user.name;
 
   return (
-    <div className="space-y-6 stagger-children">
-      <PageHeader title={`Hola, ${firstName} 👋`} description="Tu portal de turnos.">
-        <Button asChild>
-          <Link href="/portal/reservar">
-            <CalendarPlus className="h-4 w-4" />
-            Reservar turno
-          </Link>
-        </Button>
-      </PageHeader>
+    <div className="space-y-8 stagger-children">
+      {/* 1. Tarjeta de bienvenida */}
+      <section>
+        <PageHeader title={`Hola ${firstName} 👋`} description="Bienvenido nuevamente. Desde aquí podés gestionar todos tus turnos de manera rápida." />
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CalendarCheck className="h-4 w-4 text-primary" />
-            Tu próximo turno
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {next ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold capitalize">
-                    {formatDate(parseLocalDateKey(next.date))}
-                  </span>
-                  <StatusBadge status={next.status as BookingStatus} />
+      {/* 2. Resumen (Stat Cards) */}
+      <section className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Próximo turno"
+          value={next ? formatDateShort(parseLocalDateKey(next.date)) : "—"}
+          icon={CalendarCheck}
+        />
+        <StatCard
+          label="Turnos pendientes"
+          value={pendientes}
+          icon={CalendarDays}
+        />
+        <StatCard
+          label="Turnos realizados"
+          value={realizados}
+          icon={History}
+        />
+      </section>
+
+      <div className="grid gap-6 md:grid-cols-7">
+        {/* Columna Izquierda (Próximo Turno + Acciones Rápidas) */}
+        <div className="flex flex-col gap-6 md:col-span-4 lg:col-span-5">
+          {/* 3. Próximo turno */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarCheck className="h-4 w-4 text-primary" />
+                Tu próximo turno
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {next ? (
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-muted/20 p-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold capitalize text-lg">
+                        {formatDate(parseLocalDateKey(next.date))}
+                      </span>
+                      <StatusBadge status={next.status as BookingStatus} />
+                    </div>
+                    <p className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      {next.startTime} – {next.endTime} h
+                    </p>
+                  </div>
+                  <Button variant="outline" asChild>
+                    <Link href="/portal/turnos">Gestionar</Link>
+                  </Button>
                 </div>
-                <p className="flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  {next.startTime} – {next.endTime} h
-                </p>
-              </div>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/portal/turnos">Ver todos</Link>
-              </Button>
+              ) : (
+                <EmptyState
+                  icon={CalendarX}
+                  title="Todavía no tenés ningún turno reservado."
+                  description="Empezá reservando tu primera sesión kinesiológica."
+                  action={
+                    <Button asChild size="lg" className="mt-2">
+                      <Link href="/portal/reservar">
+                        <CalendarPlus className="mr-2 h-4 w-4" />
+                        Reservar turno
+                      </Link>
+                    </Button>
+                  }
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 4. Acciones rápidas */}
+          <section>
+            <h2 className="mb-3 text-lg font-semibold tracking-tight">Acciones rápidas</h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Card interactive asChild>
+                <Link href="/portal/reservar" className="flex flex-col gap-2 p-5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <CalendarPlus className="h-5 w-5" />
+                  </span>
+                  <span className="font-medium">Reservar turno</span>
+                  <span className="text-xs text-muted-foreground">Agendá una nueva sesión</span>
+                </Link>
+              </Card>
+              
+              <Card interactive asChild>
+                <Link href="/portal/turnos" className="flex flex-col gap-2 p-5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <CalendarDays className="h-5 w-5" />
+                  </span>
+                  <span className="font-medium">Mis turnos</span>
+                  <span className="text-xs text-muted-foreground">Ver pendientes e historial</span>
+                </Link>
+              </Card>
+
+              <Card interactive asChild>
+                <Link href="/portal/perfil" className="flex flex-col gap-2 p-5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <User className="h-5 w-5" />
+                  </span>
+                  <span className="font-medium">Mi perfil</span>
+                  <span className="text-xs text-muted-foreground">Actualizá tus datos</span>
+                </Link>
+              </Card>
             </div>
-          ) : (
-            <EmptyState
-              icon={CalendarX}
-              title="No tenés turnos próximos"
-              description="Reservá tu próxima sesión en unos pocos clics."
-              action={
-                <Button asChild>
-                  <Link href="/portal/reservar">
-                    <CalendarPlus className="h-4 w-4" />
-                    Reservar turno
-                  </Link>
-                </Button>
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
+          </section>
+        </div>
+
+        {/* Columna Derecha (Información útil) */}
+        <div className="md:col-span-3 lg:col-span-2">
+          {/* 5. Información útil */}
+          <Card className="h-full bg-accent/30 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Lightbulb className="h-4 w-4 text-primary" />
+                Información útil
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-4 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">•</span>
+                  <span><strong>Llegá 10 minutos antes</strong> de tu turno para realizar el ingreso sin apuros.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">•</span>
+                  <span><strong>Llevá estudios médicos</strong> pertinentes si es tu primera sesión por una dolencia nueva.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">•</span>
+                  <span><strong>Avisá con anticipación</strong> desde la sección "Mis turnos" si necesitás cancelar, para liberar el cupo.</span>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

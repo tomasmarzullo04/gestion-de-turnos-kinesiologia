@@ -25,7 +25,7 @@ interface Props {
   initialSlots: SlotView[];
 }
 
-function StepHeader({
+const StepHeader = React.memo(function StepHeader({
   step,
   title,
   done,
@@ -47,7 +47,7 @@ function StepHeader({
       <h2 className="font-display text-base font-semibold tracking-tight">{title}</h2>
     </div>
   );
-}
+});
 
 export function BookingFlow({ days, initialDate, initialSlots }: Props) {
   const router = useRouter();
@@ -62,7 +62,7 @@ export function BookingFlow({ days, initialDate, initialSlots }: Props) {
   // Cupos en vivo (Realtime): el contador y la barra bajan sin recargar.
   useRealtimeSlots(selectedDate, setSlots);
 
-  async function selectDay(date: string) {
+  const selectDay = React.useCallback(async (date: string) => {
     if (date === selectedDate) return;
     setSelectedDate(date);
     setSelectedSlot(null);
@@ -78,9 +78,9 @@ export function BookingFlow({ days, initialDate, initialSlots }: Props) {
     } finally {
       setLoadingSlots(false);
     }
-  }
+  }, [selectedDate]);
 
-  function confirm() {
+  const confirm = React.useCallback(() => {
     if (!selectedSlot) return;
     startTransition(async () => {
       const result = await bookSlotAction({ slotId: selectedSlot.id, notes });
@@ -94,7 +94,7 @@ export function BookingFlow({ days, initialDate, initialSlots }: Props) {
         setSelectedSlot(null);
       }
     });
-  }
+  }, [selectedSlot, notes, router, selectedDate, selectDay]);
 
   if (days.length === 0) {
     return (
@@ -141,6 +141,9 @@ export function BookingFlow({ days, initialDate, initialSlots }: Props) {
                   </span>
                   <span className="text-lg font-semibold tabular-nums leading-none">
                     {format(d, "d")}
+                  </span>
+                  <span className="text-[0.7rem] font-medium capitalize -mt-0.5">
+                    {format(d, "MMM", { locale: es }).replace(/\.$/, "")}
                   </span>
                   <span
                     className={cn(

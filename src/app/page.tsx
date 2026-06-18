@@ -39,7 +39,7 @@ const features = [
 
 export default function HomePage() {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex flex-col">
       <header className="border-b">
         <div className="container flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-display font-semibold tracking-tight">
@@ -57,7 +57,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main>
         <section className="container flex flex-col items-center gap-6 py-20 text-center md:py-28">
           <span className="inline-flex items-center gap-2 rounded-full border bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
             <Sparkles className="h-3.5 w-3.5" />
@@ -96,6 +96,20 @@ export default function HomePage() {
                 </p>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="container py-20 text-center md:py-28">
+          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 rounded-3xl bg-primary/5 px-6 py-16 shadow-sm sm:px-12 border">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              ¿Listo para ordenar tu agenda?
+            </h2>
+            <p className="max-w-xl text-lg text-muted-foreground">
+              Empezá hoy mismo a simplificar la reserva de tus turnos y ofrecé a tus pacientes una experiencia moderna y sin fricción.
+            </p>
+            <Button size="lg" asChild className="mt-4">
+              <Link href="/register">Reservar turno ahora</Link>
+            </Button>
           </div>
         </section>
       </main>

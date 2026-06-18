@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CalendarClock, History, X } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import { cancelBookingAction } from "@/app/(patient)/actions";
@@ -54,7 +55,14 @@ export function MyBookingsList({ upcoming, past, cancellationMinHours }: Props) 
             <EmptyState
               icon={CalendarClock}
               title="No tenés turnos próximos"
-              description="Reservá un turno para verlo acá."
+              description="Empezá reservando tu primera sesión kinesiológica."
+              action={
+                <Button asChild className="mt-2">
+                  <Link href="/portal/reservar">
+                    Reservar turno
+                  </Link>
+                </Button>
+              }
             />
           ) : (
             upcoming.map((booking) => (
@@ -80,8 +88,8 @@ export function MyBookingsList({ upcoming, past, cancellationMinHours }: Props) 
           {past.length === 0 ? (
             <EmptyState
               icon={History}
-              title="Sin turnos en el historial"
-              description="Acá vas a ver tus turnos pasados y cancelados."
+              title="Aún no tenés historial"
+              description="Acá vas a ver tus turnos pasados y cancelados una vez que comiences tu tratamiento."
             />
           ) : (
             past.map((booking) => (

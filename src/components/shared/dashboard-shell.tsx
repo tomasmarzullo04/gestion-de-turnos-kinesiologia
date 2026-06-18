@@ -62,8 +62,8 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
   return (
     <div className="flex min-h-dvh">
       {/* Sidebar (desktop) */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-card lg:flex">
-        <div className="flex h-16 items-center gap-2 border-b px-6 font-semibold">
+      <aside className="hidden w-64 shrink-0 flex-col border-r bg-card/50 bg-gradient-to-b from-muted/20 to-transparent lg:flex">
+        <div className="flex h-16 items-center gap-2 border-b px-6 font-semibold bg-card/80 backdrop-blur-sm">
           <BrandMark />
           <span className="font-display text-lg tracking-tight">Kiné</span>
         </div>
@@ -76,20 +76,20 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-out-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
                   active
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    ? "bg-primary/10 text-primary shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground hover:shadow-sm",
                 )}
               >
                 {/* Indicador activo: barra de acento que crece (CSS, sin dep). */}
                 <span
                   className={cn(
-                    "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-primary transition-transform duration-200 ease-out-soft",
-                    active ? "scale-y-100" : "scale-y-0",
+                    "absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-transform duration-300 ease-out-soft",
+                    active ? "scale-y-100 opacity-100" : "scale-y-0 opacity-0",
                   )}
                 />
-                <item.icon className="h-4 w-4" />
+                <item.icon className={cn("h-4 w-4 transition-transform duration-200 group-hover:scale-110", active && "text-primary")} />
                 {item.label}
               </Link>
             );
@@ -141,8 +141,8 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-8">
-          <div className="mx-auto w-full max-w-6xl animate-fade-in">
+        <main className="flex-1 p-4 lg:p-8 bg-muted/10">
+          <div className="mx-auto w-full max-w-6xl animate-in">
             {children}
           </div>
         </main>

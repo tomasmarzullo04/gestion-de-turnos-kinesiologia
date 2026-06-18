@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Ban, Check, Clock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -18,7 +19,7 @@ function capacityLabel(slot: SlotView): string {
   return `${slot.remaining} de ${slot.capacity}`;
 }
 
-export function SlotGrid({ slots, selectedId, onSelect }: SlotGridProps) {
+export const SlotGrid = React.memo(function SlotGrid({ slots, selectedId, onSelect }: SlotGridProps) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
       {slots.map((slot, index) => {
@@ -106,4 +107,4 @@ export function SlotGrid({ slots, selectedId, onSelect }: SlotGridProps) {
       })}
     </div>
   );
-}
+});
