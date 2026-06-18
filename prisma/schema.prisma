@@ -1,17 +1,3 @@
-// Prisma schema — Sistema de gestión de turnos de kinesiología.
-//
-// BASE DE DATOS: PostgreSQL (Supabase).
-// --------------------------------------
-// - DATABASE_URL: pooler de transacción de Supabase (puerto 6543, pgbouncer=true).
-//   Lo usa el runtime de la app. En este modo NO hay prepared statements
-//   persistentes; las operaciones atómicas usan $queryRaw/$executeRaw.
-// - DIRECT_URL: pooler de sesión (puerto 5432). Lo usa Prisma para migraciones
-//   e introspección (requiere una conexión directa/de sesión).
-//
-// NOTA: los campos "enum" (role, status, dayOfWeek) se modelan como String y se
-// validan en la app con Zod + tipos (ver src/lib/constants.ts y validations).
-// Se mantiene así para no acoplar el dominio a enums nativos de la DB.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -24,19 +10,15 @@ datasource db {
 
 /// Usuario del sistema. Puede ser ADMIN (kinesiólogo/recepción) o PATIENT.
 model User {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String        @unique
   passwordHash String
-  role         String   @default("PATIENT") // "ADMIN" | "PATIENT"
+  role         String        @default("PATIENT")
   phone        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // Turnos reservados por este usuario cuando actúa como paciente.
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   appointments Appointment[] @relation("PatientAppointments")
-
-  // Perfil profesional asociado (opcional) cuando el usuario es un kinesiólogo.
   professional Professional?
 
   @@index([role])
@@ -44,35 +26,31 @@ model User {
 
 /// Profesional (kinesiólogo) con agenda propia. Puede vincularse a un User ADMIN.
 model Professional {
-  id        String   @id @default(cuid())
-  name      String
-  specialty String?
-  bio       String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Vínculo opcional con la cuenta de usuario del profesional.
-  userId String? @unique
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  availabilities Availability[]
+  id             String         @id @default(cuid())
+  name           String
+  specialty      String?
+  bio            String?
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  userId         String?        @unique
   appointments   Appointment[]
+  availabilities Availability[]
+  user           User?          @relation(fields: [userId], references: [id])
 
   @@index([active])
 }
 
 /// Servicio ofrecido (define la duración del turno). Ej: "Sesión RPG 45 min".
 model Service {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   name            String
   description     String?
   durationMinutes Int
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  appointments Appointment[]
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  appointments    Appointment[]
 
   @@index([active])
 }
@@ -80,16 +58,14 @@ model Service {
 /// Franja horaria laboral semanal de un profesional.
 /// startTime/endTime se guardan como "HH:mm" (hora local de la consultoría).
 model Availability {
-  id        String @id @default(cuid())
-  dayOfWeek Int // 0 = domingo ... 6 = sábado (compatible con date-fns getDay)
-  startTime String // "HH:mm"
-  endTime   String // "HH:mm"
-
+  id             String       @id @default(cuid())
+  dayOfWeek      Int
+  startTime      String
+  endTime        String
   professionalId String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@unique([professionalId, dayOfWeek, startTime, endTime])
   @@index([professionalId, dayOfWeek])
@@ -97,27 +73,80 @@ model Availability {
 
 /// Turno reservado. startsAt/endsAt se guardan en UTC (DateTime).
 model Appointment {
-  id      String   @id @default(cuid())
-  startsAt DateTime
-  endsAt   DateTime
-  status   String   @default("PENDING") // "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED"
-  notes    String?
-
-  patientId String
-  patient   User   @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
-
+  id             String       @id @default(cuid())
+  startsAt       DateTime
+  endsAt         DateTime
+  status         String       @default("PENDING")
+  notes          String?
+  patientId      String
   professionalId String
+  serviceId      String
+  cancelledAt    DateTime?
+  cancelledBy    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  patient        User         @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
   professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
-
-  serviceId String
-  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-
-  cancelledAt   DateTime?
-  cancelledBy   String? // userId de quien canceló
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  service        Service      @relation(fields: [serviceId], references: [id])
 
   @@index([professionalId, startsAt])
   @@index([patientId, startsAt])
   @@index([status])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model bookings {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slot_id    String   @db.Uuid
+  user_id    String
+  status     String   @default("CONFIRMED")
+  notes      String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  slots      slots    @relation(fields: [slot_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([slot_id], map: "idx_bookings_slot")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model professionals {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  specialty      String?
+  active         Boolean          @default(true)
+  created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  slot_templates slot_templates[]
+  slots          slots[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model slot_templates {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  professional_id String?        @db.Uuid
+  day_of_week     Int
+  start_time      DateTime       @db.Time(6)
+  end_time        DateTime       @db.Time(6)
+  capacity        Int
+  active          Boolean        @default(true)
+  professionals   professionals? @relation(fields: [professional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model slots {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  professional_id String?        @db.Uuid
+  date            DateTime       @db.Date
+  start_time      DateTime       @db.Time(6)
+  end_time        DateTime       @db.Time(6)
+  capacity        Int
+  booked_count    Int            @default(0)
+  is_blocked      Boolean        @default(false)
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  bookings        bookings[]
+  professionals   professionals? @relation(fields: [professional_id], references: [id], onUpdate: NoAction)
+
+  @@unique([professional_id, date, start_time])
+  @@index([date], map: "idx_slots_date")
 }
