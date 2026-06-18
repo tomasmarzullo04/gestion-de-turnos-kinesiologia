@@ -1,249 +1,193 @@
-# Kiné · Gestión de turnos para kinesiología
+# Kiné · Turnos por cupos para kinesiología
 
-Aplicación web full-stack para gestionar turnos de una consultoría de
-kinesiología, con dos roles (**Admin** y **Paciente**) y soporte para **varios
-profesionales**, cada uno con su propia agenda.
+Aplicación web full-stack para gestionar turnos de un estudio de kinesiología
+con un modelo de **cupos por franja horaria**: el día se divide en bloques de 1
+hora (08:00–21:00) con capacidad configurable; los pacientes reservan un cupo y
+la disponibilidad baja **en vivo**.
 
-Construida con **Next.js 15 (App Router)**, **TypeScript estricto**,
-**Prisma**, **Auth.js v5**, **Tailwind CSS** y **shadcn/ui**.
+Construida con **Next.js 15 (App Router)**, **TypeScript estricto**, **Prisma**,
+**Auth.js v5**, **Tailwind CSS** + **shadcn/ui**, y **Supabase (PostgreSQL +
+Realtime)** con **funciones atómicas** para la reserva.
 
 ---
 
 ## ✨ Funcionalidades
 
-### Admin (kinesiólogo / recepción)
-
-- **Dashboard** con métricas (turnos de hoy, pendientes, próximos, completados
-  en la semana) y agenda del día.
-- **Turnos**: listado con filtros (profesional, estado, rango de fechas,
-  paciente), alta manual y acciones (confirmar, completar, cancelar).
-- **Servicios**: ABM con duración, descripción y activación.
-- **Profesionales**: ABM con especialidad y activación.
-- **Disponibilidad**: franjas horarias semanales por profesional.
-
 ### Paciente
-
-- **Registro** e inicio de sesión.
-- **Reserva**: profesional → servicio → **slots disponibles reales**
-  (calculados según disponibilidad y turnos ya tomados) → confirmar.
+- Registro e inicio de sesión.
+- **Reserva** en pasos: elegir día → ver franjas 08–21 con **cupos restantes**
+  (estados disponible / pocos cupos ≤3 / sin cupos / cerrada) → confirmar.
+- **Cupos en vivo** (Supabase Realtime): el contador baja sin recargar.
 - **Mis turnos**: próximos e historial, con cancelación (antelación mínima
-  configurable).
-- **Perfil**: edición de nombre y teléfono.
+  configurable) que libera el cupo.
+
+### Admin
+- **Plantillas**: día + ventana horaria + capacidad por bloque.
+- **Generar/actualizar agenda**: materializa las franjas de los próximos 30 días
+  desde las plantillas activas (sin duplicar).
+- **Agenda por día**: ocupación de cada franja, lista de inscriptos, cancelar
+  una reserva y abrir/cerrar (bloquear) una franja.
 
 ---
 
-## 🧱 Stack técnico
+## 🧱 Modelo de datos y concurrencia
 
-| Capa            | Tecnología                                              |
-| --------------- | ------------------------------------------------------- |
-| Framework       | Next.js 15 (App Router, Server Actions, Route Handlers) |
-| Lenguaje        | TypeScript (modo estricto)                              |
-| UI              | Tailwind CSS · shadcn/ui · lucide-react · sonner        |
-| ORM             | Prisma (SQLite en dev, PostgreSQL en prod)              |
-| Autenticación   | Auth.js v5 (Credentials + JWT, rol en DB)               |
-| Hash contraseñas| bcryptjs                                                |
-| Validación      | Zod (compartida cliente/servidor) + React Hook Form     |
-| Fechas/horas    | date-fns · date-fns-tz                                  |
+Tablas (en Supabase): `professionals`, `slot_templates`, `slots`, `bookings`, y
+la tabla `User` (autenticación). La reserva y la cancelación se hacen **siempre**
+con las funciones atómicas de Postgres, nunca leyendo-y-escribiendo desde la app:
+
+- `book_slot(p_slot_id uuid, p_user_id text, p_notes text)`
+- `cancel_booking(p_booking_id uuid, p_user_id text)`
+
+Esto evita sobre-reservas ante clics concurrentes. La app las invoca con
+`prisma.$queryRaw` (compatible con el pooler de transacción `pgbouncer=true`, sin
+prepared statements persistentes) y traduce los errores de negocio
+(`SLOT_FULL`, `ALREADY_BOOKED`, `SLOT_NOT_FOUND`, `SLOT_BLOCKED`,
+`BOOKING_NOT_FOUND`, `FORBIDDEN`) a mensajes claros en español.
+
+> `bookings.user_id` (text) guarda el `User.id` (cuid) de la cuenta autenticada,
+> sin clave foránea a nivel de base.
 
 ---
 
-## 🚀 Puesta en marcha (desarrollo local)
+## 🚀 Puesta en marcha
 
 ### Requisitos
-
-- **Node.js ≥ 20** (recomendado 22)
-- npm (o pnpm/yarn)
+- **Node.js ≥ 20**
+- Un proyecto de **Supabase** con las tablas y funciones de cupos ya creadas, y
+  las variables de conexión.
 
 ### Pasos
 
 ```bash
-# 1. Instalar dependencias
+# 1. Dependencias
 npm install
 
 # 2. Variables de entorno
 cp .env.example .env
-# Generá un secreto para Auth.js y pegalo en AUTH_SECRET:
-#   openssl rand -base64 32
+#   - DATABASE_URL: pooler de transacción (6543, pgbouncer=true)
+#   - DIRECT_URL: pooler de sesión (5432)
+#   - AUTH_SECRET: openssl rand -base64 32
+#   - (opcional) NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (Realtime)
 
-# 3. Crear la base de datos y aplicar el schema (SQLite)
-npm run db:migrate          # crea la migración inicial + la DB dev.db
+# 3. Sincronizar el schema de Prisma con la base (crea la tabla User)
+npx prisma db push
 
-# 4. Cargar datos de ejemplo
+# 4. Datos demo (admin, paciente, profesional, plantillas y franjas 30 días)
 npm run db:seed
 
-# 5. Levantar el servidor de desarrollo
+# 5. Verificar conexión
+npm run db:check
+
+# 6. Desarrollo
 npm run dev
 ```
 
-La app queda disponible en **http://localhost:3000**.
+La app queda en **http://localhost:3000**.
 
-> Si solo querés un esquema rápido sin historial de migraciones, podés usar
-> `npm run db:push` en lugar de `db:migrate`.
-
----
-
-## 🔑 Credenciales de prueba
-
-Generadas por el seed (configurables en `.env`):
+### Credenciales de prueba
 
 | Rol      | Email                     | Contraseña     |
 | -------- | ------------------------- | -------------- |
 | Admin    | `admin@kinesio.local`     | `Admin123!`    |
 | Paciente | `paciente@kinesio.local`  | `Paciente123!` |
 
-El seed también crea 2 profesionales, 3 servicios, disponibilidad semanal de
-muestra y 2 turnos de ejemplo (uno confirmado a futuro y uno completado).
+---
+
+## 🔴 Realtime (cupos en vivo) — opcional
+
+1. Completá `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase
+   → Settings → API).
+2. En el **SQL Editor** de Supabase, habilitá Realtime y una policy de lectura
+   para que el navegador (rol `anon`/`authenticated`) pueda recibir cambios de
+   `slots`:
+
+```sql
+-- Publicar la tabla en el canal de Realtime
+alter publication supabase_realtime add table public.slots;
+
+-- Permitir solo LECTURA de slots desde el cliente (no expone bookings)
+create policy "slots_select_public"
+  on public.slots for select
+  to anon, authenticated
+  using (true);
+```
+
+> El runtime del servidor conecta como rol `postgres` (bypassa RLS), así que las
+> lecturas/escrituras de la app no dependen de policies. La policy de arriba es
+> solo para el Realtime del navegador.
+
+Si no configurás esto, la app funciona igual: los cupos se refrescan con la
+navegación normal en lugar de en vivo.
 
 ---
 
 ## 📜 Scripts
 
-| Script              | Descripción                                        |
-| ------------------- | -------------------------------------------------- |
-| `npm run dev`       | Servidor de desarrollo                             |
-| `npm run build`     | `prisma generate` + build de producción            |
-| `npm run start`     | Servidor de producción (tras `build`)              |
-| `npm run lint`      | ESLint                                             |
-| `npm run typecheck` | Chequeo de tipos (tsc)                             |
-| `npm run db:migrate`| Crea/aplica migraciones (dev)                      |
-| `npm run db:deploy` | Aplica migraciones (prod)                          |
-| `npm run db:push`   | Sincroniza el schema sin migraciones               |
-| `npm run db:seed`   | Carga datos de ejemplo                             |
-| `npm run db:studio` | Prisma Studio (explorador de la DB)                |
-| `npm run db:reset`  | Resetea la DB y vuelve a correr el seed            |
+| Script              | Descripción                                  |
+| ------------------- | -------------------------------------------- |
+| `npm run dev`       | Servidor de desarrollo                       |
+| `npm run build`     | `prisma generate` + build de producción      |
+| `npm run start`     | Servidor de producción                       |
+| `npm run lint`      | ESLint                                       |
+| `npm run typecheck` | Chequeo de tipos                             |
+| `npm run db:push`   | Sincroniza el schema con la base             |
+| `npm run db:seed`   | Carga datos demo                             |
+| `npm run db:check`  | Verifica conexión y lista las tablas         |
+| `npm run db:studio` | Prisma Studio                                |
 
 ---
 
 ## 🏗️ Arquitectura
 
-Separación de responsabilidades en capas:
-
 ```
 src/
-├─ app/                      Rutas (App Router)
-│  ├─ (auth)/                Login y registro + acciones de auth
-│  ├─ (admin)/               Panel admin (/admin/*) + acciones de admin
-│  ├─ (patient)/             Portal del paciente (/portal/*) + acciones
-│  └─ api/
-│     ├─ auth/[...nextauth]/ Handler de Auth.js
-│     └─ slots/              Cálculo de horarios disponibles
-├─ components/
-│  ├─ ui/                    Primitivas shadcn/ui
-│  ├─ shared/                Componentes transversales (shell, badges, etc.)
-│  └─ features/              Componentes de dominio (SlotPicker, AppointmentCard)
+├─ app/
+│  ├─ (auth)/        login, registro
+│  ├─ (admin)/       /admin (dashboard, agenda, plantillas) + acciones
+│  ├─ (patient)/     /portal (inicio, reservar, mis turnos, perfil) + acciones
+│  └─ api/slots/     franjas de un día (JSON)
+├─ components/  ui/ (shadcn) · shared/ · features/ (SlotGrid, BookingCard)
 ├─ lib/
-│  ├─ auth/                  Config y helpers de Auth.js + sesión/roles
-│  ├─ validations/          Schemas Zod (compartidos cliente/servidor)
-│  ├─ constants.ts          "Enums" de dominio + configuración de negocio
-│  ├─ datetime.ts           Utilidades de fecha/hora (timezone-aware)
-│  ├─ db.ts                  Cliente Prisma (singleton)
-│  ├─ rate-limit.ts          Rate limiting en memoria
-│  └─ action-result.ts       Helpers para resultados tipados de acciones
-├─ server/
-│  ├─ repositories/          Acceso a datos (Prisma), sin lógica de negocio
-│  ├─ services/              Lógica de negocio (slots, reservas, reglas)
-│  └─ errors.ts              Errores de negocio tipados
-└─ types/                    Tipos compartidos + augmentación de next-auth
-
-prisma/
-├─ schema.prisma             Modelo de datos
-└─ seed.ts                   Datos de ejemplo
+│  ├─ auth/          Auth.js + sesión/roles
+│  ├─ hooks/         useRealtimeSlots
+│  ├─ supabase/      cliente de Realtime (navegador)
+│  ├─ validations/   Zod (booking, slot-template, auth)
+│  ├─ booking-config.ts   defaults del modelo de cupos
+│  ├─ datetime.ts    utilidades TZ-aware (date-fns)
+│  └─ db.ts          cliente Prisma (singleton)
+└─ server/
+   ├─ repositories/  acceso a datos (Prisma)
+   └─ services/      lógica de negocio
+        booking.service.ts    book/cancel atómicos + reads
+        slot.service.ts       días disponibles, franjas, vista admin
+        slot-template.service.ts  ABM de plantillas
+        generation.service.ts materialización de franjas
 ```
 
-- **Repositorios**: encapsulan Prisma. Sin reglas de negocio.
-- **Servicios**: implementan las reglas (cálculo de slots, validación de
-  solapamientos, transiciones de estado, ventanas de antelación).
-- **Server Actions / Route Handlers**: orquestadores delgados que validan con
-  Zod, verifican autorización y delegan en los servicios.
+- **Capa de servicios**: reglas de negocio; la reserva/cancelación delega en las
+  funciones atómicas de Postgres.
+- **Server Actions / Route Handlers**: validan con Zod, verifican rol y delegan
+  en los servicios.
 
-### Reglas de negocio destacadas
+### Configuración del negocio (demo)
 
-- **Sin solapamientos**: la reserva se hace dentro de una transacción que
-  vuelve a verificar conflictos antes de crear el turno.
-- **Dentro de disponibilidad y a futuro**: solo se ofrecen y aceptan horarios
-  que caen en una franja del profesional y respetan la antelación mínima.
-- **Duración derivada del servicio**: el fin del turno se calcula a partir de
-  `durationMinutes`.
-- **Cancelación**: los pacientes solo pueden cancelar con la antelación mínima
-  configurada (`CANCELLATION_MIN_HOURS`); el admin no tiene esa restricción.
+Centralizada en `src/lib/booking-config.ts` (sobreescribible por `.env`):
+capacidad 20, jornada 08:00–21:00, bloques de 60 min, "pocos cupos" ≤ 3,
+horizonte de generación 30 días.
 
 ---
 
 ## 🔐 Seguridad
-
-- Contraseñas hasheadas con **bcrypt** (12 rounds); nunca en texto plano.
-- **Autorización por rol** en cada Server Action y Route Handler
-  (`assertRole` / `requireRole`) y en el **middleware** (protege `/admin` y
-  `/portal` y redirige según rol).
-- **Validación con Zod** en toda entrada del servidor (no se confía en el
-  cliente).
-- **Prisma** parametriza las consultas (previene inyección).
-- **Rate limiting** básico en login, registro y reservas.
-- Variables sensibles en `.env` (ver `.env.example`).
-
-> El rate limiting es en memoria (suficiente para dev / instancia única). En
-> producción serverless conviene usar un store compartido (p. ej. Upstash
-> Redis); la firma de `rateLimit()` se mantiene.
+- Contraseñas con **bcrypt**; autorización por rol en acciones y middleware.
+- **Zod** en toda entrada del servidor; Prisma parametriza las consultas.
+- Reserva concurrente a prueba de sobre-cupos vía funciones atómicas.
+- Rate limiting en login, registro y reservas.
+- Nunca se exponen errores crudos de Postgres al usuario.
 
 ---
 
 ## 🌐 Zona horaria
-
-La consultoría opera en una zona horaria fija
-(`NEXT_PUBLIC_TIMEZONE`, por defecto `America/Argentina/Buenos_Aires`):
-
-- La **disponibilidad** se define en hora local (`HH:mm`).
-- Los **turnos** se guardan en **UTC** y se muestran convertidos a la zona
-  local de la consultoría.
-
----
-
-## ⬆️ Migrar a PostgreSQL (producción)
-
-El schema es portable. Para desplegar en **Vercel + Postgres** (Neon, Supabase,
-Vercel Postgres, etc.):
-
-1. En `prisma/schema.prisma`, cambiá el provider:
-
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-
-2. Configurá `DATABASE_URL` con la cadena de conexión Postgres (con
-   `sslmode=require` si corresponde) y `AUTH_SECRET` en el entorno del hosting.
-
-3. Aplicá migraciones en el deploy:
-
-   ```bash
-   npm run db:deploy
-   ```
-
-> **Nota sobre "enums"**: no se usan enums nativos de Prisma porque SQLite no
-> los soporta. Los campos `role`, `status` y `dayOfWeek` se modelan como
-> columnas escalares y se validan en la aplicación (Zod + tipos). Esto mantiene
-> el mismo schema funcionando en SQLite y PostgreSQL.
-
-### Variables de entorno
-
-| Variable                 | Descripción                                           |
-| ------------------------ | ----------------------------------------------------- |
-| `DATABASE_URL`           | Conexión a la base de datos                           |
-| `AUTH_SECRET`            | Secreto para firmar los JWT de sesión                 |
-| `AUTH_TRUST_HOST`        | `true` detrás de proxy/hosting                        |
-| `NEXT_PUBLIC_TIMEZONE`   | Zona horaria IANA de la consultoría                   |
-| `CANCELLATION_MIN_HOURS` | Antelación mínima para cancelar (horas)               |
-| `BOOKING_MIN_LEAD_HOURS` | Antelación mínima para reservar (horas)               |
-| `SLOT_INTERVAL_MINUTES`  | Granularidad de los slots ofrecidos (minutos)         |
-| `SEED_*`                 | Credenciales generadas por el seed                    |
-
----
-
-## 🎨 UI/UX
-
-- Diseño minimalista y responsive (mobile-first), accesible.
-- Paleta serena: neutros (slate) + acento **teal**, con **modo oscuro**.
-- Estados de **carga** (skeletons), **vacíos** y **errores** (toasts) cuidados.
-- Selector de turnos visual (calendario + grilla de horarios).
+El estudio opera en `NEXT_PUBLIC_TIMEZONE` (por defecto
+`America/Argentina/Buenos_Aires`). Las franjas (`date` + `time`) se interpretan
+en esa zona para los cálculos de "futuro" y la ventana de cancelación.
