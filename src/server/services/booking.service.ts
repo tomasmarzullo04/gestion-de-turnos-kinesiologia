@@ -133,4 +133,71 @@ export const bookingService = {
       rethrowAsBusiness(error);
     }
   },
+
+  /**
+   * Cancela como ADMIN: resuelve el dueño de la reserva y llama a la función
+   * con ese user_id (la función valida pertenencia). Sin ventana de antelación.
+   */
+  async adminCancel(bookingId: string): Promise<void> {
+    const rows = await prisma.$queryRaw<{ user_id: string }[]>`
+      SELECT user_id FROM bookings
+      WHERE id = ${bookingId}::uuid AND status <> 'CANCELLED'
+    `;
+    if (rows.length === 0) {
+      throw new BusinessError(ERROR_MESSAGES.BOOKING_NOT_FOUND);
+    }
+    const ownerId = rows[0]!.user_id;
+    try {
+      await prisma.$queryRaw`
+        SELECT cancel_booking(${bookingId}::uuid, ${ownerId}::text)
+      `;
+      logger.info("Reserva cancelada por admin", { bookingId });
+    } catch (error) {
+      rethrowAsBusiness(error);
+    }
+  },
+
+  /** Reservas de un paciente (próximas e históricas), listo para mostrar. */
+  async listForUser(userId: string): Promise<MyBooking[]> {
+    const rows = await prisma.$queryRaw<
+      {
+        id: string;
+        status: string;
+        notes: string | null;
+        date: string;
+        start_time: string;
+        end_time: string;
+        starts_at: Date;
+      }[]
+    >`
+      SELECT b.id, b.status, b.notes,
+             s.date::text AS date,
+             to_char(s.start_time, 'HH24:MI') AS start_time,
+             to_char(s.end_time, 'HH24:MI') AS end_time,
+             ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) AS starts_at
+      FROM bookings b
+      JOIN slots s ON s.id = b.slot_id
+      WHERE b.user_id = ${userId}::text
+      ORDER BY s.date DESC, s.start_time DESC
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      notes: r.notes,
+      date: r.date,
+      startTime: r.start_time,
+      endTime: r.end_time,
+      startsAtISO: r.starts_at.toISOString(),
+    }));
+  },
 };
+
+export interface MyBooking {
+  id: string;
+  status: string;
+  notes: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  startsAtISO: string;
+}

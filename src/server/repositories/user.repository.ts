@@ -11,6 +11,14 @@ export const userRepository = {
     return prisma.user.findUnique({ where: { id } });
   },
 
+  /** Busca varios usuarios por id (para resolver inscriptos a una franja). */
+  findManyByIds(ids: string[]) {
+    return prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, email: true, phone: true },
+    });
+  },
+
   create(data: {
     name: string;
     email: string;

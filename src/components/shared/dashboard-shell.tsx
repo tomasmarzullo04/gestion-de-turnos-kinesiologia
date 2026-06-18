@@ -1,13 +1,11 @@
 "use client";
 
 import {
-  Briefcase,
+  CalendarClock,
   CalendarDays,
   CalendarPlus,
-  Clock,
   LayoutDashboard,
   Menu,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,10 +32,8 @@ interface NavItem {
 
 const ADMIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Turnos", href: "/admin/turnos", icon: CalendarDays },
-  { label: "Servicios", href: "/admin/servicios", icon: Briefcase },
-  { label: "Profesionales", href: "/admin/profesionales", icon: Users },
-  { label: "Disponibilidad", href: "/admin/disponibilidad", icon: Clock },
+  { label: "Agenda", href: "/admin/agenda", icon: CalendarDays },
+  { label: "Plantillas", href: "/admin/plantillas", icon: CalendarClock },
 ];
 
 const PATIENT_NAV: NavItem[] = [

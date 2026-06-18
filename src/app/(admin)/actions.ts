@@ -1,217 +1,117 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-import { fail, fromError, ok } from "@/lib/action-result";
+import { fromError, ok } from "@/lib/action-result";
 import { assertRole } from "@/lib/auth/session";
-import { ROLES, type AppointmentStatus } from "@/lib/constants";
-import {
-  adminCreateAppointmentSchema,
-  cancelAppointmentSchema,
-  updateStatusSchema,
-} from "@/lib/validations/appointment";
-import { availabilitySchema } from "@/lib/validations/availability";
-import { professionalSchema } from "@/lib/validations/professional";
-import { serviceSchema } from "@/lib/validations/service";
-import { appointmentService } from "@/server/services/appointment.service";
-import { availabilityService } from "@/server/services/availability.service";
-import { professionalService } from "@/server/services/professional.service";
-import { serviceService } from "@/server/services/service.service";
+import { ROLES } from "@/lib/constants";
+import { slotTemplateSchema } from "@/lib/validations/slot-template";
+import { bookingService } from "@/server/services/booking.service";
+import { generationService } from "@/server/services/generation.service";
+import { slotService } from "@/server/services/slot.service";
+import { slotTemplateService } from "@/server/services/slot-template.service";
 import { type ActionResult } from "@/types";
 
-// ── Servicios ────────────────────────────────────────────────────────────
-export async function createServiceAction(
+// ── Plantillas ───────────────────────────────────────────────────────────
+export async function createTemplateAction(
   input: unknown,
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
-    const data = serviceSchema.parse(input);
-    await serviceService.create(data);
-    revalidatePath("/admin/servicios");
+    const data = slotTemplateSchema.parse(input);
+    await slotTemplateService.create(data);
+    revalidatePath("/admin/plantillas");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-export async function updateServiceAction(
+export async function updateTemplateAction(
   id: string,
   input: unknown,
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
-    const data = serviceSchema.parse(input);
-    await serviceService.update(id, data);
-    revalidatePath("/admin/servicios");
+    const data = slotTemplateSchema.parse(input);
+    await slotTemplateService.update(id, data);
+    revalidatePath("/admin/plantillas");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-export async function toggleServiceActiveAction(
-  id: string,
-  active: boolean,
-): Promise<ActionResult> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    await serviceService.setActive(id, active);
-    revalidatePath("/admin/servicios");
-    return ok(undefined);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-export async function deleteServiceAction(id: string): Promise<ActionResult> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    await serviceService.remove(id);
-    revalidatePath("/admin/servicios");
-    return ok(undefined);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-// ── Profesionales ──────────────────────────────────────────────────────────
-export async function createProfessionalAction(
-  input: unknown,
-): Promise<ActionResult> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    const data = professionalSchema.parse(input);
-    await professionalService.create(data);
-    revalidatePath("/admin/profesionales");
-    return ok(undefined);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-export async function updateProfessionalAction(
-  id: string,
-  input: unknown,
-): Promise<ActionResult> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    const data = professionalSchema.parse(input);
-    await professionalService.update(id, data);
-    revalidatePath("/admin/profesionales");
-    return ok(undefined);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-export async function toggleProfessionalActiveAction(
+export async function toggleTemplateActiveAction(
   id: string,
   active: boolean,
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
-    await professionalService.setActive(id, active);
-    revalidatePath("/admin/profesionales");
+    await slotTemplateService.setActive(id, active);
+    revalidatePath("/admin/plantillas");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-export async function deleteProfessionalAction(
-  id: string,
-): Promise<ActionResult> {
+export async function deleteTemplateAction(id: string): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
-    await professionalService.remove(id);
-    revalidatePath("/admin/profesionales");
+    await slotTemplateService.remove(id);
+    revalidatePath("/admin/plantillas");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-// ── Disponibilidad ──────────────────────────────────────────────────────────
-export async function createAvailabilityAction(
-  input: unknown,
-): Promise<ActionResult> {
+// ── Generación de agenda ───────────────────────────────────────────────────
+export async function generateAgendaAction(): Promise<ActionResult<number>> {
   try {
     await assertRole(ROLES.ADMIN);
-    const data = availabilitySchema.parse(input);
-    await availabilityService.create(data);
-    revalidatePath("/admin/disponibilidad");
-    return ok(undefined);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-export async function deleteAvailabilityAction(
-  id: string,
-): Promise<ActionResult> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    await availabilityService.remove(id);
-    revalidatePath("/admin/disponibilidad");
-    return ok(undefined);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-// ── Turnos ────────────────────────────────────────────────────────────────
-export async function createAppointmentAction(
-  input: unknown,
-): Promise<ActionResult> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    const data = adminCreateAppointmentSchema.parse(input);
-    await appointmentService.book({
-      patientId: data.patientId,
-      professionalId: data.professionalId,
-      serviceId: data.serviceId,
-      startsAtISO: data.startsAt,
-      notes: data.notes || null,
-      // El admin crea turnos ya confirmados.
-      status: "CONFIRMED",
-    });
+    const created = await generationService.generateAgenda();
+    revalidatePath("/admin/agenda");
     revalidatePath("/admin");
-    revalidatePath("/admin/turnos");
-    return ok(undefined);
+    return ok(created);
   } catch (error) {
     return fromError(error);
   }
 }
 
-export async function updateAppointmentStatusAction(
+// ── Franjas (bloquear / desbloquear) ───────────────────────────────────────
+const blockSchema = z.object({
+  slotId: z.string().uuid(),
+  blocked: z.boolean(),
+});
+
+export async function toggleSlotBlockedAction(
   input: unknown,
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
-    const { id, status } = updateStatusSchema.parse(input);
-    await appointmentService.updateStatus(id, status as AppointmentStatus);
-    revalidatePath("/admin");
-    revalidatePath("/admin/turnos");
+    const { slotId, blocked } = blockSchema.parse(input);
+    await slotService.setBlocked(slotId, blocked);
+    revalidatePath("/admin/agenda");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-export async function cancelAppointmentAdminAction(
+// ── Reservas (cancelar como admin) ─────────────────────────────────────────
+const adminCancelSchema = z.object({ bookingId: z.string().uuid() });
+
+export async function adminCancelBookingAction(
   input: unknown,
 ): Promise<ActionResult> {
   try {
-    const admin = await assertRole(ROLES.ADMIN);
-    const { id, reason } = cancelAppointmentSchema.parse(input);
-    await appointmentService.cancel({
-      id,
-      actorId: admin.id,
-      actorRole: ROLES.ADMIN,
-      reason: reason || null,
-    });
-    revalidatePath("/admin");
-    revalidatePath("/admin/turnos");
+    await assertRole(ROLES.ADMIN);
+    const { bookingId } = adminCancelSchema.parse(input);
+    await bookingService.adminCancel(bookingId);
+    revalidatePath("/admin/agenda");
     return ok(undefined);
   } catch (error) {
     return fromError(error);

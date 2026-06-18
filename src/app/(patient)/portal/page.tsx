@@ -1,62 +1,37 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarCheck, CalendarPlus, CalendarX } from "lucide-react";
+import { CalendarCheck, CalendarPlus, CalendarX, Clock } from "lucide-react";
 
-import {
-  AppointmentCard,
-  type AppointmentCardData,
-} from "@/components/features/appointment-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { type BookingStatus } from "@/lib/booking-config";
 import { requirePatient } from "@/lib/auth/session";
-import {
-  ACTIVE_STATUSES,
-  type AppointmentStatus,
-} from "@/lib/constants";
-import { appointmentService } from "@/server/services/appointment.service";
+import { formatDate } from "@/lib/datetime";
+import { parseLocalDateKey } from "@/lib/datetime";
+import { bookingService } from "@/server/services/booking.service";
 
 export const metadata: Metadata = { title: "Inicio" };
 export const dynamic = "force-dynamic";
 
 export default async function PortalHomePage() {
   const user = await requirePatient();
-  const appointments = await appointmentService.listByPatient(user.id, "asc");
+  const bookings = await bookingService.listForUser(user.id);
 
   const now = Date.now();
-  const upcoming = appointments.filter(
-    (a) =>
-      a.startsAt.getTime() >= now &&
-      ACTIVE_STATUSES.includes(a.status as AppointmentStatus),
+  const next = bookings.find(
+    (b) =>
+      b.status === "CONFIRMED" &&
+      new Date(b.startsAtISO).getTime() >= now,
   );
-  const next = upcoming[0];
-
-  const nextCard: AppointmentCardData | null = next
-    ? {
-        id: next.id,
-        startsAtISO: next.startsAt.toISOString(),
-        endsAtISO: next.endsAt.toISOString(),
-        status: next.status as AppointmentStatus,
-        serviceName: next.service.name,
-        professionalName: next.professional.name,
-        notes: next.notes,
-      }
-    : null;
 
   const firstName = user.name.split(" ")[0] ?? user.name;
 
   return (
     <div className="space-y-6 stagger-children">
-      <PageHeader
-        title={`Hola, ${firstName} 👋`}
-        description="Este es tu portal de turnos."
-      >
+      <PageHeader title={`Hola, ${firstName} 👋`} description="Tu portal de turnos.">
         <Button asChild>
           <Link href="/portal/reservar">
             <CalendarPlus className="h-4 w-4" />
@@ -73,15 +48,24 @@ export default async function PortalHomePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {nextCard ? (
-            <AppointmentCard
-              appointment={nextCard}
-              action={
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/portal/turnos">Ver todos</Link>
-                </Button>
-              }
-            />
+          {next ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold capitalize">
+                    {formatDate(parseLocalDateKey(next.date))}
+                  </span>
+                  <StatusBadge status={next.status as BookingStatus} />
+                </div>
+                <p className="flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  {next.startTime} – {next.endTime} h
+                </p>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/portal/turnos">Ver todos</Link>
+              </Button>
+            </div>
           ) : (
             <EmptyState
               icon={CalendarX}
@@ -99,19 +83,6 @@ export default async function PortalHomePage() {
           )}
         </CardContent>
       </Card>
-
-      {upcoming.length > 1 && (
-        <p className="text-sm text-muted-foreground">
-          Tenés {upcoming.length} turnos próximos.{" "}
-          <Link
-            href="/portal/turnos"
-            className="font-medium text-primary hover:underline"
-          >
-            Verlos todos
-          </Link>
-          .
-        </p>
-      )}
     </div>
   );
 }

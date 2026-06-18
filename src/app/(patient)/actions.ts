@@ -7,20 +7,18 @@ import { assertAuthenticated, assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
 import { rateLimit } from "@/lib/rate-limit";
 import {
-  bookAppointmentSchema,
-  cancelAppointmentSchema,
-} from "@/lib/validations/appointment";
+  bookSlotSchema,
+  cancelBookingSchema,
+} from "@/lib/validations/booking";
 import { profileSchema } from "@/lib/validations/auth";
-import { appointmentService } from "@/server/services/appointment.service";
+import { bookingService } from "@/server/services/booking.service";
 import { userRepository } from "@/server/repositories/user.repository";
 import { type ActionResult } from "@/types";
 
-export async function bookAppointmentAction(
-  input: unknown,
-): Promise<ActionResult> {
+export async function bookSlotAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await assertRole(ROLES.PATIENT);
-    const data = bookAppointmentSchema.parse(input);
+    const data = bookSlotSchema.parse(input);
 
     // Rate limit: máx. 10 reservas por hora por paciente.
     const limit = rateLimit(`book:${user.id}`, 10, 60 * 60 * 1000);
@@ -30,15 +28,14 @@ export async function bookAppointmentAction(
       );
     }
 
-    await appointmentService.book({
-      patientId: user.id,
-      professionalId: data.professionalId,
-      serviceId: data.serviceId,
-      startsAtISO: data.startsAt,
+    await bookingService.book({
+      slotId: data.slotId,
+      userId: user.id,
       notes: data.notes || null,
     });
 
     revalidatePath("/portal");
+    revalidatePath("/portal/reservar");
     revalidatePath("/portal/turnos");
     return ok(undefined);
   } catch (error) {
@@ -46,18 +43,17 @@ export async function bookAppointmentAction(
   }
 }
 
-export async function cancelMyAppointmentAction(
+export async function cancelBookingAction(
   input: unknown,
 ): Promise<ActionResult> {
   try {
     const user = await assertRole(ROLES.PATIENT);
-    const { id, reason } = cancelAppointmentSchema.parse(input);
+    const { bookingId } = cancelBookingSchema.parse(input);
 
-    await appointmentService.cancel({
-      id,
-      actorId: user.id,
-      actorRole: ROLES.PATIENT,
-      reason: reason || null,
+    await bookingService.cancel({
+      bookingId,
+      userId: user.id,
+      role: ROLES.PATIENT,
     });
 
     revalidatePath("/portal");

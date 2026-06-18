@@ -1,33 +1,33 @@
 import { Badge } from "@/components/ui/badge";
 import {
-  APPOINTMENT_STATUS,
-  APPOINTMENT_STATUS_LABELS,
-  type AppointmentStatus,
-} from "@/lib/constants";
+  BOOKING_STATUS,
+  BOOKING_STATUS_LABELS,
+  type BookingStatus,
+} from "@/lib/booking-config";
 
 const VARIANT: Record<
-  AppointmentStatus,
+  BookingStatus,
   "default" | "secondary" | "success" | "warning" | "destructive" | "outline"
 > = {
-  [APPOINTMENT_STATUS.PENDING]: "warning",
-  [APPOINTMENT_STATUS.CONFIRMED]: "default",
-  [APPOINTMENT_STATUS.COMPLETED]: "outline",
-  [APPOINTMENT_STATUS.CANCELLED]: "destructive",
+  [BOOKING_STATUS.CONFIRMED]: "success",
+  [BOOKING_STATUS.CANCELLED]: "destructive",
 };
 
-// Color del punto indicador por estado (semántico).
-const DOT: Record<AppointmentStatus, string> = {
-  [APPOINTMENT_STATUS.PENDING]: "bg-warning",
-  [APPOINTMENT_STATUS.CONFIRMED]: "bg-primary",
-  [APPOINTMENT_STATUS.COMPLETED]: "bg-muted-foreground",
-  [APPOINTMENT_STATUS.CANCELLED]: "bg-destructive",
+const DOT: Record<BookingStatus, string> = {
+  [BOOKING_STATUS.CONFIRMED]: "bg-success",
+  [BOOKING_STATUS.CANCELLED]: "bg-destructive",
 };
 
-export function StatusBadge({ status }: { status: AppointmentStatus }) {
+export function StatusBadge({ status }: { status: BookingStatus }) {
+  // Estados desconocidos (p. ej. históricos) caen en un look neutro.
+  const variant = VARIANT[status] ?? "outline";
+  const dot = DOT[status] ?? "bg-muted-foreground";
+  const label = BOOKING_STATUS_LABELS[status] ?? status;
+
   return (
-    <Badge variant={VARIANT[status]}>
-      <span className={`h-1.5 w-1.5 rounded-full ${DOT[status]}`} />
-      {APPOINTMENT_STATUS_LABELS[status]}
+    <Badge variant={variant}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
     </Badge>
   );
 }
