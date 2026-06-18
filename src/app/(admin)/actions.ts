@@ -6,8 +6,10 @@ import { z } from "zod";
 import { fromError, ok } from "@/lib/action-result";
 import { assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
+import { markAttendanceSchema } from "@/lib/validations/attendance";
 import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
+import { attendanceService } from "@/server/services/attendance.service";
 import { bookingService, type MyBooking } from "@/server/services/booking.service";
 import { generationService } from "@/server/services/generation.service";
 import { professionalService } from "@/server/services/professional.service";
@@ -172,6 +174,21 @@ export async function getPatientBookingsAction(
     await assertRole(ROLES.ADMIN);
     const bookings = await bookingService.listForUser(userId);
     return ok(bookings);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+// ── Asistencias ─────────────────────────────────────────────────────────────
+export async function markAttendanceAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const professional = await assertRole(ROLES.ADMIN);
+    const { bookingId, status } = markAttendanceSchema.parse(input);
+    await attendanceService.mark(bookingId, status, professional.id);
+    revalidatePath("/admin/asistencias");
+    return ok(undefined);
   } catch (error) {
     return fromError(error);
   }

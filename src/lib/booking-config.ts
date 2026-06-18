@@ -36,3 +36,23 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   CONFIRMED: "Confirmado",
   CANCELLED: "Cancelado",
 };
+
+// Estados de asistencia (tabla `attendances`). "Pendiente" = sin fila aún.
+export const ATTENDANCE_STATUS = {
+  PENDING: "PENDING",
+  PRESENT: "PRESENT",
+  ABSENT: "ABSENT",
+} as const;
+
+export type AttendanceStatus =
+  (typeof ATTENDANCE_STATUS)[keyof typeof ATTENDANCE_STATUS];
+
+export const ATTENDANCE_STATUS_VALUES = Object.values(
+  ATTENDANCE_STATUS,
+) as [AttendanceStatus, ...AttendanceStatus[]];
+
+export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  PENDING: "Pendiente",
+  PRESENT: "Presente",
+  ABSENT: "Ausente",
+};
