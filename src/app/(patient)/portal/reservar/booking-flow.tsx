@@ -59,26 +59,71 @@ export function BookingFlow({ days, initialDate, initialSlots }: Props) {
   const [selectedSlot, setSelectedSlot] = React.useState<SlotView | null>(null);
   const [notes, setNotes] = React.useState("");
 
+  // Caché en memoria de las franjas por día ya consultado: evita re-pedir a la
+  // base (un viaje a la región de la DB) en cada click. Se siembra con el día
+  // inicial que ya vino del servidor.
+  const cacheRef = React.useRef<Map<string, SlotView[]>>(new Map());
+  if (initialDate && !cacheRef.current.has(initialDate)) {
+    cacheRef.current.set(initialDate, initialSlots);
+  }
+  // Día "vivo" para descartar respuestas viejas si el usuario cambia de día
+  // mientras una request está en vuelo.
+  const selectedDateRef = React.useRef<string | null>(initialDate);
+
   // Cupos en vivo (Realtime): el contador y la barra bajan sin recargar.
   useRealtimeSlots(selectedDate, setSlots);
 
-  const selectDay = React.useCallback(async (date: string) => {
-    if (date === selectedDate) return;
-    setSelectedDate(date);
-    setSelectedSlot(null);
-    setLoadingSlots(true);
-    try {
-      const res = await fetch(`/api/slots?date=${date}`);
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { slots: SlotView[] };
-      setSlots(data.slots);
-    } catch {
-      toast.error("No se pudieron cargar los horarios.");
-      setSlots([]);
-    } finally {
-      setLoadingSlots(false);
+  const fetchSlots = React.useCallback(
+    async (date: string, silent: boolean) => {
+      try {
+        const res = await fetch(`/api/slots?date=${date}`);
+        if (!res.ok) throw new Error();
+        const data = (await res.json()) as { slots: SlotView[] };
+        cacheRef.current.set(date, data.slots);
+        if (selectedDateRef.current === date) setSlots(data.slots);
+      } catch {
+        if (!silent) {
+          toast.error("No se pudieron cargar los horarios.");
+          if (selectedDateRef.current === date) setSlots([]);
+        }
+      } finally {
+        if (!silent && selectedDateRef.current === date) {
+          setLoadingSlots(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const selectDay = React.useCallback(
+    (date: string) => {
+      if (date === selectedDateRef.current) return;
+      selectedDateRef.current = date;
+      setSelectedDate(date);
+      setSelectedSlot(null);
+
+      const cached = cacheRef.current.get(date);
+      if (cached) {
+        // Instantáneo desde caché; revalidamos en segundo plano (SWR).
+        setSlots(cached);
+        setLoadingSlots(false);
+        void fetchSlots(date, true);
+      } else {
+        setLoadingSlots(true);
+        void fetchSlots(date, false);
+      }
+    },
+    [fetchSlots],
+  );
+
+  // Prefetch del día siguiente para que el próximo click sea instantáneo.
+  React.useEffect(() => {
+    const idx = days.findIndex((d) => d.date === selectedDate);
+    const nextDay = idx >= 0 ? days[idx + 1] : undefined;
+    if (nextDay && !cacheRef.current.has(nextDay.date)) {
+      void fetchSlots(nextDay.date, true);
     }
-  }, [selectedDate]);
+  }, [selectedDate, days, fetchSlots]);
 
   const confirm = React.useCallback(() => {
     if (!selectedSlot) return;
@@ -89,12 +134,17 @@ export function BookingFlow({ days, initialDate, initialSlots }: Props) {
         router.push("/portal/turnos");
       } else {
         toast.error(result.error);
-        // Refrescar la grilla por si el cupo cambió mientras tanto.
-        if (selectedDate) void selectDay(selectedDate);
+        // El cupo pudo cambiar: invalidamos la caché de ese día y recargamos.
+        const cur = selectedDateRef.current;
+        if (cur) {
+          cacheRef.current.delete(cur);
+          setLoadingSlots(true);
+          void fetchSlots(cur, false);
+        }
         setSelectedSlot(null);
       }
     });
-  }, [selectedSlot, notes, router, selectedDate, selectDay]);
+  }, [selectedSlot, notes, router, fetchSlots]);
 
   if (days.length === 0) {
     return (

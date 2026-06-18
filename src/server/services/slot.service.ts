@@ -76,7 +76,8 @@ export const slotService = {
              ) AS available_slots,
              count(*) AS total_slots
       FROM slots s
-      WHERE ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+      WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
+        AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
       GROUP BY s.date
       ORDER BY s.date
       LIMIT ${BOOKING_CONFIG.generationDays}
