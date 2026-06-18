@@ -6,6 +6,8 @@ import {
   CalendarPlus,
   LayoutDashboard,
   Menu,
+  Stethoscope,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,12 +36,15 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Agenda", href: "/admin/agenda", icon: CalendarDays },
   { label: "Plantillas", href: "/admin/plantillas", icon: CalendarClock },
+  { label: "Pacientes", href: "/admin/pacientes", icon: Users },
+  { label: "Profesionales", href: "/admin/profesionales", icon: Stethoscope },
 ];
 
 const PATIENT_NAV: NavItem[] = [
   { label: "Inicio", href: "/portal", icon: LayoutDashboard },
   { label: "Reservar turno", href: "/portal/reservar", icon: CalendarPlus },
   { label: "Mis turnos", href: "/portal/turnos", icon: CalendarDays },
+  { label: "Profesionales", href: "/portal/profesionales", icon: Stethoscope },
 ];
 
 interface DashboardShellProps {

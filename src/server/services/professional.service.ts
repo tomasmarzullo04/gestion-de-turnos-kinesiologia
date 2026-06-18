@@ -1,4 +1,13 @@
 import { prisma } from "@/lib/db";
+import { type ProfessionalInput } from "@/lib/validations/professional";
+
+function normalize(input: ProfessionalInput) {
+  return {
+    name: input.name,
+    specialty: input.specialty ? input.specialty : null,
+    active: input.active,
+  };
+}
 
 /** Profesionales del estudio (modelo de cupos). */
 export const professionalService = {
@@ -15,6 +24,12 @@ export const professionalService = {
 
   findById: (id: string) => prisma.professional.findUnique({ where: { id } }),
 
-  create: (data: { name: string; specialty?: string | null }) =>
-    prisma.professional.create({ data }),
+  create: (input: ProfessionalInput) =>
+    prisma.professional.create({ data: normalize(input) }),
+
+  update: (id: string, input: ProfessionalInput) =>
+    prisma.professional.update({ where: { id }, data: normalize(input) }),
+
+  setActive: (id: string, active: boolean) =>
+    prisma.professional.update({ where: { id }, data: { active } }),
 };

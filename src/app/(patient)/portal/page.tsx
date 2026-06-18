@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   CalendarCheck,
+  CalendarClock,
   CalendarDays,
   CalendarPlus,
   CalendarX,
@@ -30,14 +31,23 @@ export default async function PortalHomePage() {
   const bookings = await bookingService.listForUser(user.id);
 
   const now = Date.now();
-  const next = bookings.find(
-    (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() >= now,
-  );
-  
-  const pendientes = bookings.filter(
-    (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() >= now,
-  ).length;
-  
+  // Próximos ordenados de más cercano a más lejano (la query viene DESC).
+  const upcomingSorted = bookings
+    .filter(
+      (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() >= now,
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.startsAtISO).getTime() - new Date(b.startsAtISO).getTime(),
+    );
+  const recentDone = bookings
+    .filter(
+      (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() < now,
+    )
+    .slice(0, 3);
+
+  const next = upcomingSorted[0]; // el más cercano
+  const pendientes = upcomingSorted.length;
   const realizados = bookings.filter(
     (b) => b.status === "CONFIRMED" && new Date(b.startsAtISO).getTime() < now,
   ).length;
@@ -184,6 +194,80 @@ export default async function PortalHomePage() {
           </Card>
         </div>
       </div>
+
+      {/* 6. Actividad: próximos y recientes */}
+      {(upcomingSorted.length > 0 || recentDone.length > 0) && (
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                Próximos turnos
+              </CardTitle>
+              {upcomingSorted.length > 0 && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/portal/turnos">Ver todos</Link>
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {upcomingSorted.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No tenés turnos próximos.
+                </p>
+              ) : (
+                <ul className="divide-y">
+                  {upcomingSorted.slice(0, 4).map((b) => (
+                    <li
+                      key={b.id}
+                      className="flex items-center justify-between py-2.5"
+                    >
+                      <span className="text-sm font-medium capitalize">
+                        {formatDateShort(parseLocalDateKey(b.date))}
+                      </span>
+                      <span className="text-sm tabular-nums text-muted-foreground">
+                        {b.startTime}–{b.endTime} h
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <History className="h-4 w-4 text-primary" />
+                Últimos realizados
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentDone.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Todavía no tenés turnos realizados.
+                </p>
+              ) : (
+                <ul className="divide-y">
+                  {recentDone.map((b) => (
+                    <li
+                      key={b.id}
+                      className="flex items-center justify-between py-2.5"
+                    >
+                      <span className="text-sm font-medium capitalize">
+                        {formatDateShort(parseLocalDateKey(b.date))}
+                      </span>
+                      <span className="text-sm tabular-nums text-muted-foreground">
+                        {b.startTime}–{b.endTime} h
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

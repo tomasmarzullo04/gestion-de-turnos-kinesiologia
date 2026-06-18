@@ -6,9 +6,11 @@ import { z } from "zod";
 import { fromError, ok } from "@/lib/action-result";
 import { assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
+import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
-import { bookingService } from "@/server/services/booking.service";
+import { bookingService, type MyBooking } from "@/server/services/booking.service";
 import { generationService } from "@/server/services/generation.service";
+import { professionalService } from "@/server/services/professional.service";
 import { slotService } from "@/server/services/slot.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
 import { type ActionResult } from "@/types";
@@ -113,6 +115,63 @@ export async function adminCancelBookingAction(
     await bookingService.adminCancel(bookingId);
     revalidatePath("/admin/agenda");
     return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+// ── Profesionales (ABM) ─────────────────────────────────────────────────────
+export async function createProfessionalAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    const data = professionalSchema.parse(input);
+    await professionalService.create(data);
+    revalidatePath("/admin/profesionales");
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function updateProfessionalAction(
+  id: string,
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    const data = professionalSchema.parse(input);
+    await professionalService.update(id, data);
+    revalidatePath("/admin/profesionales");
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function toggleProfessionalActiveAction(
+  id: string,
+  active: boolean,
+): Promise<ActionResult> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    await professionalService.setActive(id, active);
+    revalidatePath("/admin/profesionales");
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+// ── Pacientes ───────────────────────────────────────────────────────────────
+export async function getPatientBookingsAction(
+  userId: string,
+): Promise<ActionResult<MyBooking[]>> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    const bookings = await bookingService.listForUser(userId);
+    return ok(bookings);
   } catch (error) {
     return fromError(error);
   }
