@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { bookSlotAction } from "@/app/(patient)/actions";
 import { SlotGrid } from "@/components/features/slot-grid";
+import { useRealtimeSlots } from "@/lib/hooks/use-realtime-slots";
 import { SubmitButton } from "@/components/shared/submit-button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,9 @@ export function BookingFlow({ days, initialDate, initialSlots }: Props) {
   const [loadingSlots, setLoadingSlots] = React.useState(false);
   const [selectedSlot, setSelectedSlot] = React.useState<SlotView | null>(null);
   const [notes, setNotes] = React.useState("");
+
+  // Cupos en vivo (Realtime): el contador y la barra bajan sin recargar.
+  useRealtimeSlots(selectedDate, setSlots);
 
   async function selectDay(date: string) {
     if (date === selectedDate) return;
