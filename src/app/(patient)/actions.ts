@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { fail, fromError, ok } from "@/lib/action-result";
 import { assertAuthenticated, assertRole } from "@/lib/auth/session";
@@ -11,6 +12,7 @@ import {
   cancelBookingSchema,
 } from "@/lib/validations/booking";
 import { profileSchema } from "@/lib/validations/auth";
+import { emitEvent } from "@/server/events/emitter";
 import { bookingService } from "@/server/services/booking.service";
 import { userRepository } from "@/server/repositories/user.repository";
 import { type ActionResult } from "@/types";
@@ -28,11 +30,34 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult> {
       );
     }
 
-    await bookingService.book({
+    const booking = await bookingService.book({
       slotId: data.slotId,
       userId: user.id,
       notes: data.notes || null,
     });
+
+    // Evento appointment.confirmed para automatización externa (n8n manda el
+    // mail). Se emite DESPUÉS de responderle al socio con `after()`: no bloquea
+    // su respuesta y su fallo nunca afecta la reserva ya confirmada.
+    if (booking.bookingId) {
+      const bookingId = booking.bookingId;
+      after(() =>
+        emitEvent(
+          "appointment.confirmed",
+          {
+            booking: {
+              id: bookingId,
+              date: booking.date,
+              startTime: booking.startTime,
+              endTime: booking.endTime,
+            },
+            service: "entrenamiento",
+            patient: { name: user.name, email: user.email },
+          },
+          `${bookingId}:appointment.confirmed`,
+        ),
+      );
+    }
 
     revalidatePath("/portal");
     revalidatePath("/portal/reservar");

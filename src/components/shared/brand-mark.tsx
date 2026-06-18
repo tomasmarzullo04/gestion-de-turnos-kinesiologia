@@ -10,7 +10,7 @@ interface BrandMarkProps {
 }
 
 /**
- * Sello de marca de Kiné: el cuadrado teal con la "línea de pulso" que se
+ * Sello de marca de Apex: el cuadrado teal con la "línea de pulso" que se
  * dibuja sola al cargar (stroke-dashoffset). Es la única pieza con audacia;
  * el resto de la UI se mantiene callado. Respeta prefers-reduced-motion
  * (la animación se neutraliza globalmente en globals.css).

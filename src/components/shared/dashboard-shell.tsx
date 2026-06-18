@@ -70,7 +70,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
       <aside className="hidden w-64 shrink-0 flex-col border-r bg-card/50 bg-gradient-to-b from-muted/20 to-transparent lg:flex">
         <div className="flex h-16 items-center gap-2 border-b px-6 font-semibold bg-card/80 backdrop-blur-sm">
           <BrandMark />
-          <span className="font-display text-lg tracking-tight">Kiné</span>
+          <span className="font-display text-lg tracking-tight">Apex</span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
           {nav.map((item) => {
@@ -132,7 +132,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
               className="flex items-center gap-2 font-display font-semibold tracking-tight lg:hidden"
             >
               <BrandMark className="h-7 w-7" animate={false} />
-              Kiné
+              Apex
             </Link>
           </div>
 

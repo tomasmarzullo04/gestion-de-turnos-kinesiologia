@@ -106,7 +106,7 @@ export function ProfessionalFormDialog({
                 <FormItem>
                   <FormLabel>Nombre</FormLabel>
                   <FormControl>
-                    <Input placeholder="Lic. Martín Sosa" {...field} />
+                    <Input placeholder="Nombre del entrenador" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -119,7 +119,7 @@ export function ProfessionalFormDialog({
                 <FormItem>
                   <FormLabel>Especialidad</FormLabel>
                   <FormControl>
-                    <Input placeholder="Kinesiología deportiva" {...field} />
+                    <Input placeholder="Entrenamiento" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

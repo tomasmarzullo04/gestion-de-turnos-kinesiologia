@@ -16,12 +16,12 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Kiné · Gestión de turnos",
-    template: "%s · Kiné",
+    default: "Apex · Reserva de entrenamiento",
+    template: "%s · Apex",
   },
   description:
-    "Sistema de gestión de turnos para consultoría de kinesiología. Reservá, gestioná y administrá tus sesiones de forma simple.",
-  applicationName: "Kiné",
+    "Reservá tu turno de entrenamiento en Apex. Elegí el día y la hora con cupo disponible, en segundos.",
+  applicationName: "Apex",
 };
 
 export const viewport: Viewport = {

@@ -55,7 +55,7 @@ export function MyBookingsList({ upcoming, past, cancellationMinHours }: Props) 
             <EmptyState
               icon={CalendarClock}
               title="No tenés turnos próximos"
-              description="Empezá reservando tu primera sesión kinesiológica."
+              description="Empezá reservando tu primer turno de entrenamiento."
               action={
                 <Button asChild className="mt-2">
                   <Link href="/portal/reservar">
@@ -89,7 +89,7 @@ export function MyBookingsList({ upcoming, past, cancellationMinHours }: Props) 
             <EmptyState
               icon={History}
               title="Aún no tenés historial"
-              description="Acá vas a ver tus turnos pasados y cancelados una vez que comiences tu tratamiento."
+              description="Acá vas a ver tus turnos pasados y cancelados una vez que empieces a entrenar."
             />
           ) : (
             past.map((booking) => (

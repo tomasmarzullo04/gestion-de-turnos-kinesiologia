@@ -12,7 +12,7 @@ export default function AuthLayout({
       <header className="container flex h-16 items-center">
         <Link href="/" className="flex items-center gap-2 font-display font-semibold tracking-tight">
           <BrandMark />
-          <span className="text-lg">Kiné</span>
+          <span className="text-lg">Apex</span>
         </Link>
       </header>
       <main className="container flex flex-1 items-center justify-center py-10">

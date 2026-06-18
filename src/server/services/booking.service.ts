@@ -65,18 +65,30 @@ export const bookingService = {
     slotId: string;
     userId: string;
     notes?: string | null;
-  }): Promise<{ bookingId: string | null }> {
+  }): Promise<BookResult> {
     const { slotId, userId, notes } = params;
 
-    const check = await prisma.$queryRaw<{ is_future: boolean }[]>`
-      SELECT ((date + start_time) AT TIME ZONE ${TIMEZONE}) > now() AS is_future
+    // Pre-chequeo + datos de la franja (para el evento posterior).
+    const check = await prisma.$queryRaw<
+      {
+        is_future: boolean;
+        date: string;
+        start_time: string;
+        end_time: string;
+      }[]
+    >`
+      SELECT ((date + start_time) AT TIME ZONE ${TIMEZONE}) > now() AS is_future,
+             date::text AS date,
+             to_char(start_time, 'HH24:MI') AS start_time,
+             to_char(end_time, 'HH24:MI') AS end_time
       FROM slots
       WHERE id = ${slotId}::uuid
     `;
     if (check.length === 0) {
       throw new BusinessError(ERROR_MESSAGES.SLOT_NOT_FOUND);
     }
-    if (!check[0]!.is_future) {
+    const slot = check[0]!;
+    if (!slot.is_future) {
       throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
     }
 
@@ -85,7 +97,12 @@ export const bookingService = {
         SELECT book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS book_slot
       `;
       logger.info("Reserva creada", { slotId, userId });
-      return { bookingId: rows[0]?.book_slot ?? null };
+      return {
+        bookingId: rows[0]?.book_slot ?? null,
+        date: slot.date,
+        startTime: slot.start_time,
+        endTime: slot.end_time,
+      };
     } catch (error) {
       rethrowAsBusiness(error);
     }
@@ -119,7 +136,7 @@ export const bookingService = {
       const limit = Date.now() + CANCELLATION_MIN_HOURS * 3_600_000;
       if (rows[0]!.starts_at.getTime() < limit) {
         throw new BusinessError(
-          `Solo podés cancelar con al menos ${CANCELLATION_MIN_HOURS}h de antelación. Contactá a la consultoría.`,
+          `Solo podés cancelar con al menos ${CANCELLATION_MIN_HOURS}h de antelación. Escribinos a recepción.`,
         );
       }
     }
@@ -191,6 +208,13 @@ export const bookingService = {
     }));
   },
 };
+
+export interface BookResult {
+  bookingId: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+}
 
 export interface MyBooking {
   id: string;

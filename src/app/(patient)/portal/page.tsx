@@ -114,7 +114,7 @@ export default async function PortalHomePage() {
                 <EmptyState
                   icon={CalendarX}
                   title="Todavía no tenés ningún turno reservado."
-                  description="Empezá reservando tu primera sesión kinesiológica."
+                  description="Empezá reservando tu primer turno de entrenamiento."
                   action={
                     <Button asChild size="lg" className="mt-2">
                       <Link href="/portal/reservar">
@@ -183,7 +183,7 @@ export default async function PortalHomePage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">•</span>
-                  <span><strong>Llevá estudios médicos</strong> pertinentes si es tu primera sesión por una dolencia nueva.</span>
+                  <span><strong>Traé ropa cómoda y tu botella de agua</strong> para aprovechar al máximo tu entrenamiento.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">•</span>

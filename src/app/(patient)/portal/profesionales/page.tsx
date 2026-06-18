@@ -22,7 +22,7 @@ export default async function ProfessionalsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Nuestro equipo"
-        description="Los profesionales del estudio que te van a acompañar."
+        description="El equipo de Apex que te acompaña en cada entrenamiento."
       >
         <Button asChild>
           <Link href="/portal/reservar">
@@ -52,7 +52,7 @@ export default async function ProfessionalsPage() {
                   <p className="truncate font-semibold">{p.name}</p>
                   <p className="flex items-center gap-1.5 truncate text-sm text-muted-foreground">
                     <Stethoscope className="h-3.5 w-3.5" />
-                    {p.specialty ?? "Kinesiología"}
+                    {p.specialty ?? "Entrenamiento"}
                   </p>
                 </div>
               </CardContent>

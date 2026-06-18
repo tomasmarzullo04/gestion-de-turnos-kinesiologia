@@ -9,8 +9,8 @@ function intEnv(value: string | undefined, fallback: number): number {
 }
 
 export const BOOKING_CONFIG = {
-  /** Capacidad por defecto al crear plantillas/franjas. */
-  capacityDefault: intEnv(process.env.SLOT_CAPACITY_DEFAULT, 20),
+  /** Capacidad por defecto al crear plantillas/franjas (cupo del gimnasio). */
+  capacityDefault: intEnv(process.env.SLOT_CAPACITY_DEFAULT, 10),
   /** Inicio de la jornada (hora local del estudio), "HH:mm". */
   dayStart: process.env.DAY_START ?? "08:00",
   /** Fin de la jornada (hora local del estudio), "HH:mm". */

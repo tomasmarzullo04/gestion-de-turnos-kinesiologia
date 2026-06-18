@@ -122,6 +122,57 @@ navegación normal en lugar de en vivo.
 
 ---
 
+## 🔔 Eventos / Webhook (n8n)
+
+Al **confirmarse una reserva**, la app emite el evento `appointment.confirmed`
+vía webhook firmado. **La app no manda mails**: solo emite el evento; n8n (u
+otro consumidor) se encarga del correo. Es _fire-and-forget_ (se ejecuta con
+`after()`, después de responderle al socio) y su fallo **nunca** rompe la
+reserva.
+
+Variables (`.env`):
+
+```bash
+N8N_WEBHOOK_URL="https://n8n.myinfo.la/webhook/apex-turno"
+WEBHOOK_SECRET="<secreto-compartido-con-n8n>"
+```
+
+La request es un `POST` con:
+
+- `Content-Type: application/json`
+- `X-Signature`: HMAC-SHA256 del body crudo usando `WEBHOOK_SECRET` (hex).
+- `X-Idempotency-Key`: `${bookingId}:appointment.confirmed` (para deduplicar).
+
+Body:
+
+```json
+{
+  "event": "appointment.confirmed",
+  "timestamp": "2026-01-01T12:00:00.000Z",
+  "data": {
+    "booking": { "id": "...", "date": "2026-01-01", "startTime": "08:00", "endTime": "09:00" },
+    "service": "entrenamiento",
+    "patient": { "name": "...", "email": "..." }
+  }
+}
+```
+
+### Probarlo en local
+
+1. Apuntá `N8N_WEBHOOK_URL` a un endpoint de prueba, por ejemplo
+   [webhook.site](https://webhook.site) (copiá tu URL única) o un nodo
+   **Webhook** de n8n en modo _test_.
+2. Poné cualquier `WEBHOOK_SECRET`.
+3. Reservá un turno como socio: en webhook.site vas a ver el `POST` con los
+   headers `X-Signature` / `X-Idempotency-Key` y el body de arriba.
+4. Para verificar la firma en n8n: recalculá `HMAC-SHA256(body, WEBHOOK_SECRET)`
+   y comparalo con `X-Signature`.
+
+> Si `N8N_WEBHOOK_URL` no está seteada, el evento se omite (se loguea) y la
+> reserva funciona igual.
+
+---
+
 ## 📜 Scripts
 
 | Script              | Descripción                                  |

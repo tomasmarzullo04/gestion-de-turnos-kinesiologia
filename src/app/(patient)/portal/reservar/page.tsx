@@ -21,8 +21,8 @@ export default async function BookingPage() {
   return (
     <div>
       <PageHeader
-        title="Reservar turno"
-        description="Elegí un día y un horario disponible."
+        title="Reservar entrenamiento"
+        description="Elegí el día y el horario con cupo disponible."
       />
       <BookingFlow
         days={days}
