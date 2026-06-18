@@ -142,7 +142,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
         </header>
 
         <main className="flex-1 p-4 lg:p-8 bg-muted/10">
-          <div className="mx-auto w-full max-w-6xl animate-in">
+          <div className="mx-auto w-full max-w-6xl animate-fade-in">
             {children}
           </div>
         </main>

@@ -151,12 +151,6 @@
     animation-delay: 0.34s;
   }
 
-  /* Utility para animación de entrada */
-  .animate-in {
-    opacity: 0;
-    animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
   @keyframes shimmer {
     0% {
       background-position: 200% 0;
