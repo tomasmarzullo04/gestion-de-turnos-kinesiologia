@@ -151,6 +151,20 @@
     animation-delay: 0.34s;
   }
 
+  /* Definido a mano: la clase `animate-fade-up` no se usa en el markup, así que
+     Tailwind purgaría este keyframe y `stagger-children` (opacity:0) dejaría el
+     contenido invisible. Declararlo acá garantiza que la animación exista. */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @keyframes shimmer {
     0% {
       background-position: 200% 0;
