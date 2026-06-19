@@ -128,9 +128,25 @@ export function AgendaClient({ days, selectedDate, slots }: Props) {
                   <span className="text-[0.7rem] font-medium uppercase">
                     {format(d, "EEE", { locale: es })}
                   </span>
-                  <span className="text-lg font-semibold leading-none tabular-nums">
+                  <span className="text-lg font-semibold leading-none tabular-nums mt-0.5">
                     {format(d, "d")}
                   </span>
+                  {day.totalSlots > 0 && (
+                    <div className="mt-1.5 flex w-full justify-center">
+                      <div className={cn(
+                        "h-1 w-full max-w-[24px] overflow-hidden rounded-full",
+                        active ? "bg-primary-foreground/30" : "bg-muted-foreground/20"
+                      )}>
+                        <div 
+                          className={cn(
+                            "h-full transition-all duration-300", 
+                            active ? "bg-primary-foreground" : "bg-primary"
+                          )}
+                          style={{ width: `${Math.round(((day.totalSlots - day.availableSlots) / day.totalSlots) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </button>
               );
             })}

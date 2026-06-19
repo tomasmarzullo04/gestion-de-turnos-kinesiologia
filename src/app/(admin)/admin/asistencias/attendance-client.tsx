@@ -123,6 +123,12 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
 
   const normalizedQuery = query.trim().toLowerCase();
 
+  const totalExpected = items.reduce((acc, slot) => acc + slot.attendees.length, 0);
+  const totalPresent = items.reduce((acc, slot) => acc + slot.attendees.filter(a => a.status === ATTENDANCE_STATUS.PRESENT).length, 0);
+  const totalAbsent = items.reduce((acc, slot) => acc + slot.attendees.filter(a => a.status === ATTENDANCE_STATUS.ABSENT).length, 0);
+  const totalPending = items.reduce((acc, slot) => acc + slot.attendees.filter(a => a.status === ATTENDANCE_STATUS.PENDING).length, 0);
+  const attendanceRate = totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
+
   return (
     <div className="space-y-5">
       {/* Navegador de día + filtro */}
@@ -173,6 +179,40 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
       <p className="text-sm font-medium capitalize text-muted-foreground">
         {format(day, "EEEE d 'de' MMMM 'de' yyyy", { locale: es })}
       </p>
+
+      {/* Resumen del día */}
+      {items.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 rounded-lg border bg-card p-4 shadow-sm">
+          <div className="flex flex-col">
+            <span className="text-xs text-muted-foreground">Esperados</span>
+            <span className="text-lg font-semibold tabular-nums">{totalExpected}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs text-muted-foreground">Presentes</span>
+            <span className="text-lg font-semibold tabular-nums text-success">{totalPresent}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs text-muted-foreground">Ausentes</span>
+            <span className="text-lg font-semibold tabular-nums text-destructive">{totalAbsent}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs text-muted-foreground">Pendientes</span>
+            <span className="text-lg font-semibold tabular-nums text-muted-foreground">{totalPending}</span>
+          </div>
+          <div className="col-span-2 mt-2 flex flex-col justify-center border-t pt-3 sm:col-span-1 sm:mt-0 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+            <span className="text-xs text-muted-foreground">Tasa de Asistencia</span>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-sm font-semibold tabular-nums">{attendanceRate}%</span>
+              <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden max-w-[80px]">
+                <div 
+                  className="h-full bg-success transition-all duration-500 ease-out-soft" 
+                  style={{ width: `${attendanceRate}%` }} 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <EmptyState
