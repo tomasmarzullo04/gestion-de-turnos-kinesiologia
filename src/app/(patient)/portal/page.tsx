@@ -27,7 +27,8 @@ export const metadata: Metadata = { title: "Inicio" };
 export const dynamic = "force-dynamic";
 
 export default async function PortalHomePage() {
-  const user = await requirePatient();
+  try {
+    const user = await requirePatient();
   const bookings = await bookingService.listForUser(user.id);
 
   const now = Date.now();
@@ -270,4 +271,12 @@ export default async function PortalHomePage() {
       )}
     </div>
   );
+  } catch (error: any) {
+    return (
+      <div className="p-8 text-destructive">
+        <h1 className="text-xl font-bold mb-4">Error interno en el servidor</h1>
+        <pre className="whitespace-pre-wrap text-sm">{error.stack || error.message || String(error)}</pre>
+      </div>
+    );
+  }
 }
