@@ -12,23 +12,38 @@ import { slotTemplateSchema } from "@/lib/validations/slot-template";
 import { patientSchema } from "@/lib/validations/patient";
 import { attendanceService } from "@/server/services/attendance.service";
 import { bookingService, type MyBooking } from "@/server/services/booking.service";
-import { generationService } from "@/server/services/generation.service";
+import {
+  generationService,
+  type SyncConflict,
+} from "@/server/services/generation.service";
 import { patientService } from "@/server/services/patient.service";
 import { professionalService } from "@/server/services/professional.service";
 import { slotService } from "@/server/services/slot.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
 import { type ActionResult } from "@/types";
 
-// ── Plantillas ───────────────────────────────────────────────────────────
+// ── Plantillas (única fuente de verdad: cada cambio re-sincroniza las franjas) ──
+/**
+ * Materializa/actualiza/limpia las franjas futuras según las plantillas activas
+ * y revalida. Devuelve los conflictos (franjas con reservas que quedaron
+ * huérfanas o por debajo de capacidad) para avisarlos en la UI.
+ */
+async function syncTemplatesAndRevalidate(): Promise<SyncConflict[]> {
+  const sync = await generationService.syncFutureSlots();
+  revalidatePath("/admin/plantillas");
+  revalidatePath("/admin");
+  revalidatePath("/portal/reservar");
+  return sync.conflicts;
+}
+
 export async function createTemplateAction(
   input: unknown,
-): Promise<ActionResult> {
+): Promise<ActionResult<SyncConflict[]>> {
   try {
     await assertRole(ROLES.ADMIN);
     const data = slotTemplateSchema.parse(input);
     await slotTemplateService.create(data);
-    revalidatePath("/admin/plantillas");
-    return ok(undefined);
+    return ok(await syncTemplatesAndRevalidate());
   } catch (error) {
     return fromError(error);
   }
@@ -37,13 +52,12 @@ export async function createTemplateAction(
 export async function updateTemplateAction(
   id: string,
   input: unknown,
-): Promise<ActionResult> {
+): Promise<ActionResult<SyncConflict[]>> {
   try {
     await assertRole(ROLES.ADMIN);
     const data = slotTemplateSchema.parse(input);
     await slotTemplateService.update(id, data);
-    revalidatePath("/admin/plantillas");
-    return ok(undefined);
+    return ok(await syncTemplatesAndRevalidate());
   } catch (error) {
     return fromError(error);
   }
@@ -52,23 +66,23 @@ export async function updateTemplateAction(
 export async function toggleTemplateActiveAction(
   id: string,
   active: boolean,
-): Promise<ActionResult> {
+): Promise<ActionResult<SyncConflict[]>> {
   try {
     await assertRole(ROLES.ADMIN);
     await slotTemplateService.setActive(id, active);
-    revalidatePath("/admin/plantillas");
-    return ok(undefined);
+    return ok(await syncTemplatesAndRevalidate());
   } catch (error) {
     return fromError(error);
   }
 }
 
-export async function deleteTemplateAction(id: string): Promise<ActionResult> {
+export async function deleteTemplateAction(
+  id: string,
+): Promise<ActionResult<SyncConflict[]>> {
   try {
     await assertRole(ROLES.ADMIN);
     await slotTemplateService.remove(id);
-    revalidatePath("/admin/plantillas");
-    return ok(undefined);
+    return ok(await syncTemplatesAndRevalidate());
   } catch (error) {
     return fromError(error);
   }
