@@ -39,11 +39,40 @@ export const registerSchema = z
       .or(z.literal("")),
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Confirmá la contraseña"),
+    tipoCobertura: z.enum(["OBRA_SOCIAL", "PARTICULAR"]),
+    obraSocialNombre: z.string().optional(),
+    requiereCopago: z.boolean().default(false),
+    montoCopago: z.number().min(0, "Monto inválido").optional().nullable(),
+    esPrimeraVez: z.boolean().default(true),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Las contraseñas no coinciden",
     path: ["confirmPassword"],
-  });
+  })
+  .refine(
+    (data) => {
+      if (data.tipoCobertura === "OBRA_SOCIAL") {
+        return !!data.obraSocialNombre && data.obraSocialNombre.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: "Ingresá el nombre de la obra social",
+      path: ["obraSocialNombre"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.requiereCopago) {
+        return data.montoCopago !== undefined && data.montoCopago !== null && data.montoCopago > 0;
+      }
+      return true;
+    },
+    {
+      message: "Ingresá el monto de copago",
+      path: ["montoCopago"],
+    }
+  );
 
 export const profileSchema = z.object({
   name: z

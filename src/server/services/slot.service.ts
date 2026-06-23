@@ -23,6 +23,10 @@ export interface SlotView {
   available: boolean;
   /** Pocos cupos (≤ umbral) y todavía reservable. */
   lowSlots: boolean;
+  /** Servicio asociado. */
+  serviceId: string | null;
+  serviceName: string | null;
+  serviceColor: string | null;
 }
 
 export interface SlotAttendee {
@@ -45,6 +49,9 @@ interface RawSlot {
   booked_count: number;
   is_blocked: boolean;
   is_past: boolean;
+  service_id: string | null;
+  service_name: string | null;
+  service_color: string | null;
 }
 
 function toSlotView(r: RawSlot): SlotView {
@@ -61,27 +68,52 @@ function toSlotView(r: RawSlot): SlotView {
     isPast: r.is_past,
     available,
     lowSlots: available && remaining <= BOOKING_CONFIG.lowSlotsThreshold,
+    serviceId: r.service_id,
+    serviceName: r.service_name,
+    serviceColor: r.service_color,
   };
 }
 
 export const slotService = {
-  /** Próximos días (hasta el horizonte) que tienen franjas futuras. */
-  async getUpcomingDays(): Promise<DayAvailability[]> {
-    const rows = await prisma.$queryRaw<
-      { date: string; available_slots: bigint; total_slots: bigint }[]
-    >`
-      SELECT s.date::text AS date,
-             count(*) FILTER (
-               WHERE NOT s.is_blocked AND s.booked_count < s.capacity
-             ) AS available_slots,
-             count(*) AS total_slots
-      FROM slots s
-      WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
-        AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
-      GROUP BY s.date
-      ORDER BY s.date
-      LIMIT ${BOOKING_CONFIG.generationDays}
-    `;
+  /**
+   * Próximos días (hasta el horizonte) que tienen franjas futuras.
+   * Si se pasa `serviceId`, filtra solo las franjas de ese servicio.
+   */
+  async getUpcomingDays(serviceId?: string | null): Promise<DayAvailability[]> {
+    const serviceFilter = serviceId
+      ? prisma.$queryRaw<
+          { date: string; available_slots: bigint; total_slots: bigint }[]
+        >`
+        SELECT s.date::text AS date,
+               count(*) FILTER (
+                 WHERE NOT s.is_blocked AND s.booked_count < s.capacity
+               ) AS available_slots,
+               count(*) AS total_slots
+        FROM slots s
+        WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
+          AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+          AND s.service_id = ${serviceId}::uuid
+        GROUP BY s.date
+        ORDER BY s.date
+        LIMIT ${BOOKING_CONFIG.generationDays}
+      `
+      : prisma.$queryRaw<
+          { date: string; available_slots: bigint; total_slots: bigint }[]
+        >`
+        SELECT s.date::text AS date,
+               count(*) FILTER (
+                 WHERE NOT s.is_blocked AND s.booked_count < s.capacity
+               ) AS available_slots,
+               count(*) AS total_slots
+        FROM slots s
+        WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
+          AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+        GROUP BY s.date
+        ORDER BY s.date
+        LIMIT ${BOOKING_CONFIG.generationDays}
+      `;
+
+    const rows = await serviceFilter;
     return rows.map((r) => ({
       date: r.date,
       availableSlots: Number(r.available_slots),
@@ -89,18 +121,41 @@ export const slotService = {
     }));
   },
 
-  /** Franjas de un día (clave "YYYY-MM-DD") con cupos restantes y estado. */
-  async getSlotsForDate(dateKey: string): Promise<SlotView[]> {
-    const rows = await prisma.$queryRaw<RawSlot[]>`
-      SELECT s.id,
-             to_char(s.start_time, 'HH24:MI') AS start_time,
-             to_char(s.end_time, 'HH24:MI') AS end_time,
-             s.capacity, s.booked_count, s.is_blocked,
-             (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past
-      FROM slots s
-      WHERE s.date = ${dateKey}::date
-      ORDER BY s.start_time
-    `;
+  /**
+   * Franjas de un día (clave "YYYY-MM-DD") con cupos restantes y estado.
+   * Si se pasa `serviceId`, filtra solo las franjas de ese servicio.
+   */
+  async getSlotsForDate(dateKey: string, serviceId?: string | null): Promise<SlotView[]> {
+    const rows = serviceId
+      ? await prisma.$queryRaw<RawSlot[]>`
+          SELECT s.id,
+                 to_char(s.start_time, 'HH24:MI') AS start_time,
+                 to_char(s.end_time, 'HH24:MI') AS end_time,
+                 s.capacity, s.booked_count, s.is_blocked,
+                 (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past,
+                 s.service_id,
+                 sv.name AS service_name,
+                 sv.color AS service_color
+          FROM slots s
+          LEFT JOIN services sv ON sv.id = s.service_id
+          WHERE s.date = ${dateKey}::date
+            AND s.service_id = ${serviceId}::uuid
+          ORDER BY s.start_time
+        `
+      : await prisma.$queryRaw<RawSlot[]>`
+          SELECT s.id,
+                 to_char(s.start_time, 'HH24:MI') AS start_time,
+                 to_char(s.end_time, 'HH24:MI') AS end_time,
+                 s.capacity, s.booked_count, s.is_blocked,
+                 (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past,
+                 s.service_id,
+                 sv.name AS service_name,
+                 sv.color AS service_color
+          FROM slots s
+          LEFT JOIN services sv ON sv.id = s.service_id
+          WHERE s.date = ${dateKey}::date
+          ORDER BY s.start_time
+        `;
     return rows.map(toSlotView);
   },
 
@@ -118,8 +173,12 @@ export const slotService = {
              to_char(s.start_time, 'HH24:MI') AS start_time,
              to_char(s.end_time, 'HH24:MI') AS end_time,
              s.capacity, s.booked_count, s.is_blocked,
-             (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past
+             (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past,
+             s.service_id,
+             sv.name AS service_name,
+             sv.color AS service_color
       FROM slots s
+      LEFT JOIN services sv ON sv.id = s.service_id
       WHERE s.date = ${dateKey}::date
       ORDER BY s.start_time
     `;

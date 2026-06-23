@@ -14,10 +14,11 @@ import {
 import { profileSchema } from "@/lib/validations/auth";
 import { emitEvent } from "@/server/events/emitter";
 import { bookingService } from "@/server/services/booking.service";
+import { patientService } from "@/server/services/patient.service";
 import { userRepository } from "@/server/repositories/user.repository";
 import { type ActionResult } from "@/types";
 
-export async function bookSlotAction(input: unknown): Promise<ActionResult> {
+export async function bookSlotAction(input: unknown): Promise<ActionResult<{ isFirstTime?: boolean }>> {
   try {
     const user = await assertRole(ROLES.PATIENT);
     const data = bookSlotSchema.parse(input);
@@ -30,10 +31,16 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult> {
       );
     }
 
+    // Obtener estado de primera vez del paciente
+    const profile = await patientService.getPatientProfile(user.id);
+    const esPrimeraVez = profile?.esPrimeraVez ?? false;
+
     const booking = await bookingService.book({
       slotId: data.slotId,
       userId: user.id,
+      serviceId: data.serviceId,
       notes: data.notes || null,
+      esPrimeraVez,
     });
 
     // Evento appointment.confirmed para automatización externa (n8n manda el
@@ -51,8 +58,9 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult> {
               startTime: booking.startTime,
               endTime: booking.endTime,
             },
-            service: "entrenamiento",
+            service: data.serviceId,
             patient: { name: user.name, email: user.email },
+            isFirstTime: booking.isFirstTime,
           },
           `${bookingId}:appointment.confirmed`,
         ),
@@ -62,7 +70,11 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult> {
     revalidatePath("/portal");
     revalidatePath("/portal/reservar");
     revalidatePath("/portal/turnos");
-    return ok(undefined);
+
+    // Devolver info de primera vez para el toast especial en el cliente
+    return ok({
+      isFirstTime: booking.isFirstTime,
+    });
   } catch (error) {
     return fromError(error);
   }

@@ -43,9 +43,17 @@ import { dayLabel } from "@/lib/constants";
 
 interface TemplateRow extends TemplateDTO {
   active: boolean;
+  serviceName: string | null;
+  serviceColor: string | null;
 }
 
-export function TemplatesManager({ templates }: { templates: TemplateRow[] }) {
+export function TemplatesManager({
+  templates,
+  services,
+}: {
+  templates: TemplateRow[];
+  services: { id: string; name: string; capacity: number }[];
+}) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<TemplateDTO | null>(null);
   const [deleting, setDeleting] = React.useState<TemplateRow | null>(null);
@@ -115,6 +123,7 @@ export function TemplatesManager({ templates }: { templates: TemplateRow[] }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Día</TableHead>
+                <TableHead>Servicio</TableHead>
                 <TableHead>Horario</TableHead>
                 <TableHead>Capacidad</TableHead>
                 <TableHead>Estado</TableHead>
@@ -126,6 +135,21 @@ export function TemplatesManager({ templates }: { templates: TemplateRow[] }) {
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">
                     {dayLabel(t.dayOfWeek)}
+                  </TableCell>
+                  <TableCell>
+                    {t.serviceName ? (
+                      <Badge
+                        variant="outline"
+                        style={{
+                          borderColor: t.serviceColor || undefined,
+                          color: t.serviceColor || undefined,
+                        }}
+                      >
+                        {t.serviceName}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {t.startTime} – {t.endTime}
@@ -185,6 +209,7 @@ export function TemplatesManager({ templates }: { templates: TemplateRow[] }) {
         open={formOpen}
         onOpenChange={setFormOpen}
         template={editing}
+        services={services}
       />
 
       <ConfirmDialog

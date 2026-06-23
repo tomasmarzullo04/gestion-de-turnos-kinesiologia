@@ -264,14 +264,46 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
                           key={a.bookingId}
                           className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
                         >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {a.name}
-                            </p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {a.email}
-                              {a.phone ? ` · ${a.phone}` : ""}
-                            </p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium">
+                                {a.name}
+                              </p>
+                              {a.serviceName && (
+                                <span
+                                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white"
+                                  style={{ backgroundColor: a.serviceColor || "#000" }}
+                                >
+                                  {a.serviceName}
+                                </span>
+                              )}
+                              {a.coverageString === "OBRA_SOCIAL" && (
+                                <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                  {a.coverageName || "Obra Social"}
+                                </span>
+                              )}
+                              {a.requiresCopay && (
+                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                                  Cobrar Copago
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>
+                                {a.email}
+                                {a.phone ? ` · ${a.phone}` : ""}
+                              </span>
+                              {a.sessionTotal > 0 && (
+                                <span>
+                                  · Sesión {a.sessionCurrent}/{a.sessionTotal}
+                                </span>
+                              )}
+                              {a.notes && (
+                                <span className="max-w-[200px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                                  {a.notes}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <AttendanceControl
                             value={a.status}

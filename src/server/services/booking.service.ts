@@ -2,6 +2,7 @@ import {
   CANCELLATION_MIN_HOURS,
   ROLES,
   TIMEZONE,
+  isFirstTimeSlotAllowed,
   type Role,
 } from "@/lib/constants";
 import { prisma } from "@/lib/db";
@@ -60,13 +61,18 @@ export const bookingService = {
    * Reserva un cupo de la franja. La capacidad y el bloqueo se validan de
    * forma atómica dentro de `book_slot`; acá solo agregamos un pre-chequeo
    * amable de existencia y de que la franja sea futura.
+   *
+   * Si el paciente es `esPrimeraVez`, se aplica la regla de restricción de
+   * días/horarios y se marca el tratamiento de 1 mes.
    */
   async book(params: {
     slotId: string;
     userId: string;
+    serviceId: string;
     notes?: string | null;
+    esPrimeraVez?: boolean;
   }): Promise<BookResult> {
-    const { slotId, userId, notes } = params;
+    const { slotId, userId, serviceId, notes, esPrimeraVez } = params;
 
     // Pre-chequeo + datos de la franja (para el evento posterior).
     const check = await prisma.$queryRaw<
@@ -75,12 +81,16 @@ export const bookingService = {
         date: string;
         start_time: string;
         end_time: string;
+        day_of_week: number;
+        start_hour: number;
       }[]
     >`
       SELECT ((date + start_time) AT TIME ZONE ${TIMEZONE}) > now() AS is_future,
              date::text AS date,
              to_char(start_time, 'HH24:MI') AS start_time,
-             to_char(end_time, 'HH24:MI') AS end_time
+             to_char(end_time, 'HH24:MI') AS end_time,
+             extract(dow FROM date)::int AS day_of_week,
+             extract(hour FROM start_time)::int AS start_hour
       FROM slots
       WHERE id = ${slotId}::uuid
     `;
@@ -92,20 +102,49 @@ export const bookingService = {
       throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
     }
 
+    // ── Regla de primera vez ──────────────────────────────────────────────
+    if (esPrimeraVez) {
+      const allowed = isFirstTimeSlotAllowed(slot.day_of_week, slot.start_hour);
+      if (!allowed) {
+        throw new BusinessError(
+          "Tu primera consulta solo puede ser: Lunes (tarde), Miércoles (todo el día) o Viernes (mañana).",
+        );
+      }
+    }
+
     try {
-      // book_slot devuelve la fila `bookings` (tipo compuesto). La usamos como
-      // fuente de tabla y seleccionamos solo el id (escalar) para que Prisma
-      // pueda deserializarlo.
+      // book_slot copia service_id del slot automáticamente (ver función SQL).
       const rows = await prisma.$queryRaw<{ booking_id: string | null }[]>`
         SELECT b.id AS booking_id
         FROM book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
       `;
-      logger.info("Reserva creada", { slotId, userId });
+
+      // ── Marcar primera vez completada y asignar tratamiento ────────────
+      if (esPrimeraVez) {
+        await prisma.$executeRaw`
+          UPDATE "User"
+          SET es_primera_vez = false,
+              tratamiento_inicio = now(),
+              tratamiento_fin = now() + interval '1 month',
+              numero_sesion_actual = 1
+          WHERE id = ${userId}
+        `;
+      } else {
+        // Incrementar número de sesión
+        await prisma.$executeRaw`
+          UPDATE "User"
+          SET numero_sesion_actual = numero_sesion_actual + 1
+          WHERE id = ${userId} AND role = 'PATIENT'
+        `;
+      }
+
+      logger.info("Reserva creada", { slotId, userId, serviceId });
       return {
         bookingId: rows[0]?.booking_id ?? null,
         date: slot.date,
         startTime: slot.start_time,
         endTime: slot.end_time,
+        isFirstTime: esPrimeraVez ?? false,
       };
     } catch (error) {
       rethrowAsBusiness(error);
@@ -191,15 +230,20 @@ export const bookingService = {
         start_time: string;
         end_time: string;
         starts_at: Date;
+        service_name: string | null;
+        service_color: string | null;
       }[]
     >`
       SELECT b.id, b.status, b.notes,
              s.date::text AS date,
              to_char(s.start_time, 'HH24:MI') AS start_time,
              to_char(s.end_time, 'HH24:MI') AS end_time,
-             ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) AS starts_at
+             ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) AS starts_at,
+             sv.name AS service_name,
+             sv.color AS service_color
       FROM bookings b
       JOIN slots s ON s.id = b.slot_id
+      LEFT JOIN services sv ON sv.id = b.service_id
       WHERE b.user_id = ${userId}::text
       ORDER BY s.date DESC, s.start_time DESC
     `;
@@ -211,6 +255,8 @@ export const bookingService = {
       startTime: r.start_time,
       endTime: r.end_time,
       startsAtISO: r.starts_at.toISOString(),
+      serviceName: r.service_name,
+      serviceColor: r.service_color,
     }));
   },
 };
@@ -220,6 +266,7 @@ export interface BookResult {
   date: string;
   startTime: string;
   endTime: string;
+  isFirstTime: boolean;
 }
 
 export interface MyBooking {
@@ -230,4 +277,6 @@ export interface MyBooking {
   startTime: string;
   endTime: string;
   startsAtISO: string;
+  serviceName: string | null;
+  serviceColor: string | null;
 }

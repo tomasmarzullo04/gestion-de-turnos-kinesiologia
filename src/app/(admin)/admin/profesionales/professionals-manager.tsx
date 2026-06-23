@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { toggleProfessionalActiveAction } from "@/app/(admin)/actions";
 import {
   ProfessionalFormDialog,
-  type ProfessionalDTO,
 } from "@/app/(admin)/admin/profesionales/professional-form-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -27,10 +26,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+export interface ProfessionalDTO {
+  id: string;
+  name: string;
+  specialty: string | null;
+  active: boolean;
+  serviceIds: string[];
+  serviceNames: string[];
+}
+
 export function ProfessionalsManager({
   professionals,
+  services,
 }: {
   professionals: ProfessionalDTO[];
+  services: { id: string; name: string }[];
 }) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ProfessionalDTO | null>(null);
@@ -85,6 +95,7 @@ export function ProfessionalsManager({
               <TableRow>
                 <TableHead>Profesional</TableHead>
                 <TableHead>Especialidad</TableHead>
+                <TableHead>Servicios</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="w-[1%]">Acciones</TableHead>
               </TableRow>
@@ -95,6 +106,22 @@ export function ProfessionalsManager({
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {p.specialty ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    {p.serviceNames.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {p.serviceNames.map((n: string, i: number) => (
+                          <span
+                            key={i}
+                            className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                          >
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -141,6 +168,7 @@ export function ProfessionalsManager({
         open={formOpen}
         onOpenChange={setFormOpen}
         professional={editing}
+        services={services}
       />
     </>
   );

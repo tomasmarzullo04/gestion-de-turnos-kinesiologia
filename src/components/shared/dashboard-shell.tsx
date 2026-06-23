@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ROLES, type Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useRealtimeBookings } from "@/lib/hooks/use-realtime-bookings";
 
 interface NavItem {
   label: string;
@@ -60,6 +61,9 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
   const nav = role === ROLES.ADMIN ? ADMIN_NAV : PATIENT_NAV;
   const homeHref = role === ROLES.ADMIN ? "/admin" : "/portal";
   const profileHref = role === ROLES.PATIENT ? "/portal/perfil" : undefined;
+
+  // Escuchar nuevas reservas en tiempo real (solo admin)
+  useRealtimeBookings(role);
 
   function isActive(href: string): boolean {
     if (href === homeHref) return pathname === href;

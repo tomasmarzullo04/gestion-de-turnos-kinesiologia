@@ -11,6 +11,7 @@ import {
 } from "@/app/(admin)/actions";
 import { SubmitButton } from "@/components/shared/submit-button";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -47,15 +48,17 @@ export interface TemplateDTO {
   startTime: string;
   endTime: string;
   capacity: number;
+  serviceId: string | null;
 }
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template?: TemplateDTO | null;
+  services: { id: string; name: string; capacity: number }[];
 }
 
-export function TemplateFormDialog({ open, onOpenChange, template }: Props) {
+export function TemplateFormDialog({ open, onOpenChange, template, services }: Props) {
   const [isPending, startTransition] = React.useTransition();
   const isEditing = Boolean(template);
 
@@ -63,7 +66,8 @@ export function TemplateFormDialog({ open, onOpenChange, template }: Props) {
     resolver: zodResolver(slotTemplateSchema),
     defaultValues: {
       professionalId: null,
-      dayOfWeek: 1,
+      serviceId: null,
+      daysOfWeek: [1],
       startTime: "08:00",
       endTime: "21:00",
       capacity: 20,
@@ -74,7 +78,8 @@ export function TemplateFormDialog({ open, onOpenChange, template }: Props) {
     if (open) {
       form.reset({
         professionalId: null,
-        dayOfWeek: template?.dayOfWeek ?? 1,
+        serviceId: template?.serviceId ?? null,
+        daysOfWeek: template ? [template.dayOfWeek] : [1],
         startTime: template?.startTime ?? "08:00",
         endTime: template?.endTime ?? "21:00",
         capacity: template?.capacity ?? 20,
@@ -112,27 +117,73 @@ export function TemplateFormDialog({ open, onOpenChange, template }: Props) {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
-              name="dayOfWeek"
+              name="serviceId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Día de la semana</FormLabel>
+                  <FormLabel>Servicio</FormLabel>
                   <Select
-                    value={String(field.value)}
-                    onValueChange={(v) => field.onChange(Number(v))}
+                    value={field.value ?? "none"}
+                    onValueChange={(v) => {
+                      const val = v === "none" ? null : v;
+                      field.onChange(val);
+                      if (val && !isEditing) {
+                        const s = services.find((srv) => srv.id === val);
+                        if (s) form.setValue("capacity", s.capacity);
+                      }
+                    }}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Seleccioná un servicio" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {DAYS_OF_WEEK.map((d) => (
-                        <SelectItem key={d.value} value={String(d.value)}>
-                          {d.label}
+                      <SelectItem value="none">Ninguno (General)</SelectItem>
+                      {services.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="daysOfWeek"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Días de la semana</FormLabel>
+                  <FormControl>
+                    <div className="flex flex-wrap gap-2">
+                      {DAYS_OF_WEEK.map((d) => {
+                        const isSelected = field.value?.includes(d.value);
+                        return (
+                          <button
+                            key={d.value}
+                            type="button"
+                            onClick={() => {
+                              const curr = field.value || [];
+                              const next = isSelected
+                                ? curr.filter(v => v !== d.value)
+                                : [...curr, d.value];
+                              field.onChange(next);
+                            }}
+                            className={cn(
+                              "flex h-9 min-w-[3rem] items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                              isSelected
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-transparent text-foreground hover:bg-muted"
+                            )}
+                          >
+                            {d.short}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

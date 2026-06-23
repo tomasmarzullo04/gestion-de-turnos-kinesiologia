@@ -13,6 +13,7 @@ export const professionalSchema = z.object({
     .optional()
     .or(z.literal("")),
   active: z.boolean(),
+  serviceIds: z.array(z.string().uuid()).optional().default([]),
 });
 
 export type ProfessionalInput = z.infer<typeof professionalSchema>;

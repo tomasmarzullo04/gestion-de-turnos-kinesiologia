@@ -20,6 +20,27 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Catálogo de servicios del estudio (RPG, GYM, RECOVERY, etc.).
+/// Las reglas de disponibilidad se almacenan en `schedule` (JSONB) para
+/// que los dueños puedan editarlas sin tocar código.
+model Service {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  slug      String   @unique
+  color     String   @default("#6366f1")
+  capacity  Int      @default(1)
+  schedule  Json     @default("[]")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  templates             SlotTemplate[]
+  slots                 Slot[]
+  bookings              Booking[]
+  professionalServices  ProfessionalService[]
+
+  @@map("services")
+}
+
 /// Usuario del sistema (autenticación). ADMIN o PATIENT.
 /// Las reservas referencian este id (bookings.user_id = User.id, text),
 /// sin clave foránea a nivel de base.
@@ -32,6 +53,19 @@ model User {
   phone        String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // ── Cobertura médica ────────────────────────────────────────────────────
+  tipoCoberturaString   String?  @map("tipo_cobertura") @db.VarChar
+  obraSocialNombre      String?  @map("obra_social_nombre")
+  requiereCopago        Boolean  @default(false) @map("requiere_copago")
+  montoCopago           Int?     @map("monto_copago")
+
+  // ── Tratamiento ─────────────────────────────────────────────────────────
+  sesionesTotales       Int      @default(0) @map("sesiones_totales")
+  numeroSesionActual    Int      @default(0) @map("numero_sesion_actual")
+  esPrimeraVez          Boolean  @default(true) @map("es_primera_vez")
+  tratamientoInicio     DateTime? @map("tratamiento_inicio") @db.Timestamptz(6)
+  tratamientoFin        DateTime? @map("tratamiento_fin") @db.Timestamptz(6)
 
   @@index([role])
 }
@@ -46,7 +80,20 @@ model Professional {
   templates SlotTemplate[]
   slots     Slot[]
 
+  services  ProfessionalService[]
+
   @@map("professionals")
+}
+
+/// Relación N:M entre profesionales y servicios habilitados.
+model ProfessionalService {
+  professionalId String       @map("professional_id") @db.Uuid
+  serviceId      String       @map("service_id") @db.Uuid
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  service        Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([professionalId, serviceId])
+  @@map("professional_services")
 }
 
 /// Plantilla semanal: día de la semana + rango horario + capacidad.
@@ -54,12 +101,14 @@ model Professional {
 model SlotTemplate {
   id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   professionalId String?       @map("professional_id") @db.Uuid
+  serviceId      String?       @map("service_id") @db.Uuid
   dayOfWeek      Int           @map("day_of_week")
   startTime      DateTime      @map("start_time") @db.Time(6)
   endTime        DateTime      @map("end_time") @db.Time(6)
   capacity       Int
   active         Boolean       @default(true)
   professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  service        Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
   @@map("slot_templates")
 }
@@ -68,6 +117,7 @@ model SlotTemplate {
 model Slot {
   id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   professionalId String?       @map("professional_id") @db.Uuid
+  serviceId      String?       @map("service_id") @db.Uuid
   date           DateTime      @db.Date
   startTime      DateTime      @map("start_time") @db.Time(6)
   endTime        DateTime      @map("end_time") @db.Time(6)
@@ -76,10 +126,12 @@ model Slot {
   isBlocked      Boolean       @default(false) @map("is_blocked")
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   professional   Professional? @relation(fields: [professionalId], references: [id], onUpdate: NoAction)
+  service        Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   bookings       Booking[]
 
   @@unique([professionalId, date, startTime])
   @@index([date], map: "idx_slots_date")
+  @@index([serviceId], map: "idx_slots_service")
   @@map("slots")
 }
 
@@ -88,11 +140,27 @@ model Booking {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   slotId    String   @map("slot_id") @db.Uuid
   userId    String   @map("user_id")
+  serviceId String?  @map("service_id") @db.Uuid
   status    String   @default("CONFIRMED") // "CONFIRMED" | "CANCELLED"
   notes     String?
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  slot      Slot     @relation(fields: [slotId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  slot      Slot        @relation(fields: [slotId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  service   Service?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  attendance Attendance?
 
   @@index([slotId], map: "idx_bookings_slot")
+  @@index([serviceId], map: "idx_bookings_service")
   @@map("bookings")
+}
+
+/// Asistencia a una reserva. Un registro por reserva.
+model Attendance {
+  bookingId String   @id @map("booking_id") @db.Uuid
+  status    String   @default("PENDING") // "PRESENT" | "ABSENT" | "LATE" | "PENDING"
+  markedBy  String   @map("marked_by")
+  markedAt  DateTime @default(now()) @map("marked_at") @db.Timestamptz(6)
+
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("attendances")
 }

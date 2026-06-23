@@ -12,6 +12,13 @@ export interface AttendanceAttendee {
   phone: string | null;
   status: AttendanceStatus;
   notes: string | null;
+  serviceName: string | null;
+  serviceColor: string | null;
+  coverageString: string | null;
+  coverageName: string | null;
+  requiresCopay: boolean;
+  sessionTotal: number;
+  sessionCurrent: number;
 }
 
 export interface AttendanceSlot {
@@ -56,13 +63,18 @@ export const attendanceService = {
         user_id: string;
         notes: string | null;
         status: string;
+        service_name: string | null;
+        service_color: string | null;
       }[]
     >`
       SELECT b.id AS booking_id, b.slot_id, b.user_id, b.notes,
-             COALESCE(a.status, 'PENDING') AS status
+             COALESCE(a.status, 'PENDING') AS status,
+             srv.name AS service_name,
+             srv.color AS service_color
       FROM bookings b
       JOIN slots s ON s.id = b.slot_id
       LEFT JOIN attendances a ON a.booking_id = b.id
+      LEFT JOIN services srv ON srv.id = b.service_id
       WHERE s.date = ${dateKey}::date
         AND b.status = 'CONFIRMED'
       ORDER BY b.created_at ASC
@@ -75,6 +87,12 @@ export const attendanceService = {
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
+    // We also need to get the number of attendances for the current session count.
+    // For now we'll mock `sessionCurrent` or rely on a count query if needed. 
+    // Wait, the instructions say we can just show `user.numeroSesionActual`. 
+    // In our updated `User` model, we added these fields:
+    // tipo_cobertura, obra_social_nombre, requiere_copago, sesiones_totales, numero_sesion_actual
+
     return slots.map((s) => ({
       id: s.id,
       startTime: s.start_time,
@@ -85,6 +103,8 @@ export const attendanceService = {
         .filter((r) => r.slot_id === s.id)
         .map((r) => {
           const u = userMap.get(r.user_id);
+          // Cast the raw fields from the user. We need to define them.
+          const uAny = u as any;
           return {
             bookingId: r.booking_id,
             name: u?.name ?? "Socio",
@@ -92,6 +112,13 @@ export const attendanceService = {
             phone: u?.phone ?? null,
             notes: r.notes,
             status: (r.status as AttendanceStatus) ?? ATTENDANCE_STATUS.PENDING,
+            serviceName: r.service_name,
+            serviceColor: r.service_color,
+            coverageString: uAny?.tipo_cobertura ?? null,
+            coverageName: uAny?.obra_social_nombre ?? null,
+            requiresCopay: uAny?.requiere_copago ?? false,
+            sessionTotal: uAny?.sesiones_totales ?? 0,
+            sessionCurrent: uAny?.numero_sesion_actual ?? 0,
           };
         }),
     }));

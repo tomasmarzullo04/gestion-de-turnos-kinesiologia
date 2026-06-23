@@ -13,6 +13,7 @@ import { logger } from "@/lib/logger";
 
 interface TemplateRow {
   professional_id: string | null;
+  service_id: string | null;
   day_of_week: number;
   start_time: string; // "HH:mm"
   end_time: string; // "HH:mm"
@@ -21,6 +22,7 @@ interface TemplateRow {
 
 interface Candidate {
   professionalId: string | null;
+  serviceId: string | null;
   date: string; // "YYYY-MM-DD"
   start: string; // "HH:mm"
   end: string; // "HH:mm"
@@ -34,11 +36,13 @@ export const generationService = {
    * `BOOKING_CONFIG.blockMinutes`. No duplica franjas ya existentes (incluye el
    * caso de `professional_id` NULL mediante `IS NOT DISTINCT FROM`).
    *
+   * Ahora propaga `service_id` desde la plantilla al slot generado.
+   *
    * @returns cantidad de franjas creadas.
    */
   async generateAgenda(days = BOOKING_CONFIG.generationDays): Promise<number> {
     const templates = await prisma.$queryRaw<TemplateRow[]>`
-      SELECT professional_id, day_of_week,
+      SELECT professional_id, service_id, day_of_week,
              to_char(start_time, 'HH24:MI') AS start_time,
              to_char(end_time, 'HH24:MI') AS end_time,
              capacity
@@ -62,6 +66,7 @@ export const generationService = {
         for (let m = startMin; m + block <= endMin; m += block) {
           candidates.push({
             professionalId: tpl.professional_id,
+            serviceId: tpl.service_id,
             date: dateKey,
             start: minutesToTime(m),
             end: minutesToTime(m + block),
@@ -77,13 +82,14 @@ export const generationService = {
     const results = await prisma.$transaction(
       candidates.map(
         (c) => prisma.$executeRaw`
-          INSERT INTO slots (professional_id, date, start_time, end_time, capacity)
-          SELECT ${c.professionalId}::uuid, ${c.date}::date, ${c.start}::time, ${c.end}::time, ${c.capacity}
+          INSERT INTO slots (professional_id, service_id, date, start_time, end_time, capacity)
+          SELECT ${c.professionalId}::uuid, ${c.serviceId}::uuid, ${c.date}::date, ${c.start}::time, ${c.end}::time, ${c.capacity}
           WHERE NOT EXISTS (
             SELECT 1 FROM slots
             WHERE date = ${c.date}::date
               AND start_time = ${c.start}::time
               AND professional_id IS NOT DISTINCT FROM ${c.professionalId}::uuid
+              AND service_id IS NOT DISTINCT FROM ${c.serviceId}::uuid
           )
         `,
       ),

@@ -9,11 +9,12 @@ const timeField = z
 export const slotTemplateSchema = z
   .object({
     professionalId: z.string().uuid().nullable().optional(),
-    dayOfWeek: z
-      .number({ invalid_type_error: "Seleccioná un día" })
-      .int()
-      .min(0, "Día inválido")
-      .max(6, "Día inválido"),
+    serviceId: z.string().uuid().nullable().optional(),
+    daysOfWeek: z
+      .array(z.number().int().min(0).max(6), {
+        invalid_type_error: "Seleccioná al menos un día",
+      })
+      .min(1, "Seleccioná al menos un día"),
     startTime: timeField,
     endTime: timeField,
     capacity: z

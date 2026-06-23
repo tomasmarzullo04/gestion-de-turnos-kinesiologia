@@ -28,36 +28,34 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import {
   professionalSchema,
   type ProfessionalInput,
 } from "@/lib/validations/professional";
 
-export interface ProfessionalDTO {
-  id: string;
-  name: string;
-  specialty: string | null;
-  active: boolean;
-}
+import { type ProfessionalDTO } from "@/app/(admin)/admin/profesionales/professionals-manager";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   professional?: ProfessionalDTO | null;
+  services: { id: string; name: string }[];
 }
 
 export function ProfessionalFormDialog({
   open,
   onOpenChange,
   professional,
+  services,
 }: Props) {
   const [isPending, startTransition] = React.useTransition();
   const isEditing = Boolean(professional);
 
   const form = useForm<ProfessionalInput>({
     resolver: zodResolver(professionalSchema),
-    defaultValues: { name: "", specialty: "", active: true },
+    defaultValues: { name: "", specialty: "", active: true, serviceIds: [] },
   });
 
   React.useEffect(() => {
@@ -66,6 +64,7 @@ export function ProfessionalFormDialog({
         name: professional?.name ?? "",
         specialty: professional?.specialty ?? "",
         active: professional?.active ?? true,
+        serviceIds: professional?.serviceIds ?? [],
       });
     }
   }, [open, professional, form]);
@@ -142,6 +141,54 @@ export function ProfessionalFormDialog({
                       onCheckedChange={field.onChange}
                     />
                   </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="serviceIds"
+              render={() => (
+                <FormItem>
+                  <div className="mb-4">
+                    <FormLabel className="text-base">Servicios habilitados</FormLabel>
+                    <FormDescription>
+                      Seleccioná los servicios que este profesional puede brindar.
+                    </FormDescription>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {services.map((service) => (
+                      <FormField
+                        key={service.id}
+                        control={form.control}
+                        name="serviceIds"
+                        render={({ field }) => {
+                          return (
+                            <FormItem
+                              key={service.id}
+                              className="flex flex-row items-start space-x-3 space-y-0"
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(service.id)}
+                                  onCheckedChange={(checked: boolean | "indeterminate") => {
+                                    return checked === true
+                                      ? field.onChange([...(field.value || []), service.id])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== service.id)
+                                        );
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                {service.name}
+                              </FormLabel>
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
                 </FormItem>
               )}
             />

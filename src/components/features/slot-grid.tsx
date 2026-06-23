@@ -48,15 +48,25 @@ export const SlotGrid = React.memo(function SlotGrid({ slots, selectedId, onSele
             )}
           >
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 text-sm font-semibold tabular-nums">
-                <Clock
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    selected ? "opacity-90" : "text-muted-foreground",
-                  )}
-                />
-                {slot.startTime}
-              </span>
+              <div className="flex flex-col">
+                {slot.serviceName && (
+                  <span
+                    className="text-[0.6rem] font-bold uppercase tracking-wider -mb-0.5"
+                    style={{ color: slot.serviceColor || "currentColor" }}
+                  >
+                    {slot.serviceName}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-sm font-semibold tabular-nums">
+                  <Clock
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      selected ? "opacity-90" : "text-muted-foreground",
+                    )}
+                  />
+                  {slot.startTime}
+                </span>
+              </div>
               {selected && <Check className="h-4 w-4" />}
               {!slot.available && !selected && (
                 <Ban className="h-3.5 w-3.5 text-muted-foreground" />

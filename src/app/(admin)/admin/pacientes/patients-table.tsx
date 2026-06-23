@@ -25,6 +25,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { type MyBooking } from "@/server/services/booking.service";
+import { updatePatientAction } from "@/app/(admin)/actions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { SubmitButton } from "@/components/shared/submit-button";
 
 interface PatientRow {
   id: string;
@@ -33,21 +40,62 @@ interface PatientRow {
   phone: string | null;
   upcoming: number;
   total: number;
+  tipoCoberturaString: string | null;
+  obraSocialNombre: string | null;
+  requiereCopago: boolean;
+  sesionesTotales: number;
+  numeroSesionActual: number;
+  esPrimeraVez: boolean;
+  tratamientoInicio: string | null;
+  tratamientoFin: string | null;
 }
 
 export function PatientsTable({ patients }: { patients: PatientRow[] }) {
   const [selected, setSelected] = React.useState<PatientRow | null>(null);
   const [bookings, setBookings] = React.useState<MyBooking[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [isPending, startTransition] = React.useTransition();
+
+  // Form state para editar paciente
+  const [cobertura, setCobertura] = React.useState<string>("PARTICULAR");
+  const [obraSocial, setObraSocial] = React.useState("");
+  const [copago, setCopago] = React.useState(false);
+  const [sesiones, setSesiones] = React.useState(0);
+  const [primeraVez, setPrimeraVez] = React.useState(false);
 
   function openPatient(patient: PatientRow) {
     setSelected(patient);
+    setCobertura(patient.tipoCoberturaString ?? "PARTICULAR");
+    setObraSocial(patient.obraSocialNombre ?? "");
+    setCopago(patient.requiereCopago);
+    setSesiones(patient.sesionesTotales);
+    setPrimeraVez(patient.esPrimeraVez);
     setBookings([]);
     setLoading(true);
     void getPatientBookingsAction(patient.id).then((result) => {
       if (result.success) setBookings(result.data);
       else toast.error(result.error);
       setLoading(false);
+    });
+  }
+
+  function handleSavePatient(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    startTransition(async () => {
+      const result = await updatePatientAction(selected.id, {
+        tipoCoberturaString: cobertura,
+        obraSocialNombre: obraSocial,
+        requiereCopago: copago,
+        sesionesTotales: sesiones,
+        esPrimeraVez: primeraVez,
+      });
+      if (result.success) {
+        toast.success("Datos del paciente actualizados");
+        setSelected(null);
+      } else {
+        toast.error(result.error);
+      }
     });
   }
 
@@ -69,6 +117,8 @@ export function PatientsTable({ patients }: { patients: PatientRow[] }) {
             <TableRow>
               <TableHead>Paciente</TableHead>
               <TableHead>Contacto</TableHead>
+              <TableHead>Cobertura</TableHead>
+              <TableHead>Sesiones</TableHead>
               <TableHead>Próximos</TableHead>
               <TableHead>Total</TableHead>
               <TableHead className="w-[1%]">Turnos</TableHead>
@@ -77,10 +127,36 @@ export function PatientsTable({ patients }: { patients: PatientRow[] }) {
           <TableBody>
             {patients.map((p) => (
               <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    {p.name}
+                    {p.esPrimeraVez && (
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Primera vez</Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   <div>{p.email}</div>
                   {p.phone && <div>{p.phone}</div>}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-medium">
+                      {p.tipoCoberturaString === "OBRA_SOCIAL" ? "Obra Social" : "Particular"}
+                    </span>
+                    {p.obraSocialNombre && (
+                      <span className="text-xs text-muted-foreground">{p.obraSocialNombre}</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {p.sesionesTotales > 0 ? (
+                    <span className="text-sm font-medium">
+                      {p.numeroSesionActual} / {p.sesionesTotales}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   {p.upcoming > 0 ? (
@@ -114,22 +190,91 @@ export function PatientsTable({ patients }: { patients: PatientRow[] }) {
             <DialogTitle>{selected?.name}</DialogTitle>
             <DialogDescription>{selected?.email}</DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando turnos…
+          <Tabs defaultValue="turnos" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="turnos">Turnos</TabsTrigger>
+              <TabsTrigger value="datos">Datos del paciente</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="turnos">
+              <div className="max-h-[60vh] space-y-3 overflow-y-auto mt-4 p-1">
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Cargando turnos…
+                  </div>
+                ) : bookings.length === 0 ? (
+                  <EmptyState
+                    icon={CalendarClock}
+                    title="Sin turnos"
+                    description="Este paciente todavía no reservó turnos."
+                  />
+                ) : (
+                  bookings.map((b) => <BookingCard key={b.id} booking={b} />)
+                )}
               </div>
-            ) : bookings.length === 0 ? (
-              <EmptyState
-                icon={CalendarClock}
-                title="Sin turnos"
-                description="Este paciente todavía no reservó turnos."
-              />
-            ) : (
-              bookings.map((b) => <BookingCard key={b.id} booking={b} />)
-            )}
-          </div>
+            </TabsContent>
+
+            <TabsContent value="datos">
+              <form onSubmit={handleSavePatient} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Tipo de Cobertura</Label>
+                  <Select value={cobertura} onValueChange={setCobertura}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PARTICULAR">Particular</SelectItem>
+                      <SelectItem value="OBRA_SOCIAL">Obra Social</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {cobertura === "OBRA_SOCIAL" && (
+                  <div className="space-y-2">
+                    <Label>Nombre Obra Social / Prepaga</Label>
+                    <Input
+                      value={obraSocial}
+                      onChange={(e) => setObraSocial(e.target.value)}
+                      placeholder="OSDE, Swiss Medical..."
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label>Requiere copago</Label>
+                    <div className="text-sm text-muted-foreground">El paciente debe abonar copago en la recepción</div>
+                  </div>
+                  <Switch checked={copago} onCheckedChange={setCopago} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sesiones del tratamiento (Total)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={sesiones}
+                    onChange={(e) => setSesiones(parseInt(e.target.value) || 0)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-3 border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/10">
+                  <div className="space-y-0.5">
+                    <Label className="text-amber-900 dark:text-amber-200">Primera vez</Label>
+                    <div className="text-sm text-amber-700 dark:text-amber-400">Limita los días que puede reservar</div>
+                  </div>
+                  <Switch checked={primeraVez} onCheckedChange={setPrimeraVez} />
+                </div>
+
+                <div className="flex justify-end pt-4">
+                  <SubmitButton loading={isPending} loadingText="Guardando...">
+                    Guardar cambios
+                  </SubmitButton>
+                </div>
+              </form>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </>

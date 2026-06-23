@@ -9,9 +9,11 @@ import { ROLES } from "@/lib/constants";
 import { markAttendanceSchema } from "@/lib/validations/attendance";
 import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
+import { patientSchema } from "@/lib/validations/patient";
 import { attendanceService } from "@/server/services/attendance.service";
 import { bookingService, type MyBooking } from "@/server/services/booking.service";
 import { generationService } from "@/server/services/generation.service";
+import { patientService } from "@/server/services/patient.service";
 import { professionalService } from "@/server/services/professional.service";
 import { slotService } from "@/server/services/slot.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
@@ -174,6 +176,21 @@ export async function getPatientBookingsAction(
     await assertRole(ROLES.ADMIN);
     const bookings = await bookingService.listForUser(userId);
     return ok(bookings);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function updatePatientAction(
+  userId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    const data = patientSchema.parse(input);
+    await patientService.updatePatientInfo(userId, data);
+    revalidatePath("/admin/pacientes");
+    return ok(undefined);
   } catch (error) {
     return fromError(error);
   }

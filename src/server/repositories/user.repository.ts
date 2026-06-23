@@ -25,6 +25,11 @@ export const userRepository = {
     passwordHash: string;
     role: Role;
     phone?: string | null;
+    tipoCoberturaString?: string | null;
+    obraSocialNombre?: string | null;
+    requiereCopago?: boolean;
+    montoCopago?: number | null;
+    esPrimeraVez?: boolean;
   }) {
     return prisma.user.create({ data });
   },
