@@ -1,10 +1,8 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import {
   CalendarClock,
-  CalendarCog,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -82,13 +80,10 @@ export function TemplatesManager({
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap justify-end gap-2">
-        <Button variant="outline" asChild>
-          <Link href="/admin/agenda">
-            <CalendarCog className="h-4 w-4" />
-            Generar agenda
-          </Link>
-        </Button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Los cambios se publican automáticamente; no hace falta generar nada.
+        </p>
         <Button
           onClick={() => {
             setEditing(null);

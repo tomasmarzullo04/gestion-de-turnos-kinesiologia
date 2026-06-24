@@ -88,20 +88,7 @@ export async function deleteTemplateAction(
   }
 }
 
-// ── Generación de agenda ───────────────────────────────────────────────────
-export async function generateAgendaAction(): Promise<ActionResult<number>> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    const created = await generationService.generateAgenda();
-    revalidatePath("/admin/agenda");
-    revalidatePath("/admin");
-    return ok(created);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-// ── Franjas (bloquear / desbloquear) ───────────────────────────────────────
+// ── Franjas (bloquear / desbloquear) — usado desde Asistencias ─────────────
 const blockSchema = z.object({
   slotId: z.string().uuid(),
   blocked: z.boolean(),
@@ -114,14 +101,14 @@ export async function toggleSlotBlockedAction(
     await assertRole(ROLES.ADMIN);
     const { slotId, blocked } = blockSchema.parse(input);
     await slotService.setBlocked(slotId, blocked);
-    revalidatePath("/admin/agenda");
+    revalidatePath("/admin/asistencias");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-// ── Reservas (cancelar como admin) ─────────────────────────────────────────
+// ── Reservas (cancelar como admin) — usado desde Asistencias ───────────────
 const adminCancelSchema = z.object({ bookingId: z.string().uuid() });
 
 export async function adminCancelBookingAction(
@@ -131,7 +118,7 @@ export async function adminCancelBookingAction(
     await assertRole(ROLES.ADMIN);
     const { bookingId } = adminCancelSchema.parse(input);
     await bookingService.adminCancel(bookingId);
-    revalidatePath("/admin/agenda");
+    revalidatePath("/admin/asistencias");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
