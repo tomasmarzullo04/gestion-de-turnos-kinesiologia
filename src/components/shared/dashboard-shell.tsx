@@ -88,7 +88,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
                 className={cn(
                   "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
                   active
-                    ? "bg-primary/10 text-primary shadow-sm"
+                    ? "bg-secondary/15 text-primary shadow-sm"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground hover:shadow-sm",
                 )}
               >

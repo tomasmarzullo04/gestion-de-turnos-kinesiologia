@@ -45,7 +45,7 @@ export function AttendanceTrendChart({ data }: { data: AttendanceTrendDay[] }) {
     shortDate: format(parseISO(d.date), "dd MMM", { locale: es })
   }));
 
-  const presentColor = isDark ? "#10b981" : "#059669"; // Emerald para presentes
+  const presentColor = isDark ? "#0db2ea" : "#14335c"; // Celeste / Navy para presentes
   const absentColor = isDark ? "#ef4444" : "#dc2626"; // Red para ausentes
 
   return (

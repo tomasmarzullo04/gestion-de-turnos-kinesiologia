@@ -21,7 +21,7 @@ export function OccupancyBarChart({ data }: { data: SlotOccupancy[] }) {
   
   // Adaptamos colores según si estamos en modo claro o oscuro. Usaremos variables CSS para mayor exactitud pero Recharts necesita strings para fill.
   const isDark = theme === "dark";
-  const primaryColor = isDark ? "#10b981" : "#059669"; // Emerald para primary/success look
+  const primaryColor = isDark ? "#2e70c2" : "#14335c"; // Navy/Azul para primary look
   const freeColor = isDark ? "#3f3f46" : "#e4e4e7"; // zinc-700 / zinc-200
 
   if (data.length === 0) {
