@@ -14,7 +14,7 @@ export function BrandMark({ className, animate = true }: BrandMarkProps) {
   return (
     <span
       className={cn(
-        "flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md",
+        "flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md",
         className,
       )}
       aria-hidden="true"
@@ -22,7 +22,12 @@ export function BrandMark({ className, animate = true }: BrandMarkProps) {
       <img
         src="https://res.cloudinary.com/dnfqkzxbp/image/upload/v1782304705/WhatsApp_Image_2026-06-24_at_09.13.03_n59urr.jpg"
         alt="APEX Logo"
-        className="h-full w-full object-contain"
+        className="h-full w-full object-contain cursor-pointer transition-transform hover:scale-105"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.open("https://res.cloudinary.com/dnfqkzxbp/image/upload/v1782304705/WhatsApp_Image_2026-06-24_at_09.13.03_n59urr.jpg", "_blank");
+        }}
       />
     </span>
   );

@@ -72,12 +72,11 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
   return (
     <div className="flex min-h-dvh">
       {/* Sidebar (desktop) */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-card/50 bg-gradient-to-b from-muted/20 to-transparent lg:flex">
-        <div className="flex h-24 items-center gap-3 border-b px-6 font-semibold bg-card/80 backdrop-blur-sm">
-          <BrandMark className="h-16 w-16" />
-          <span className="font-display text-2xl tracking-tight">Apex</span>
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card/50 bg-gradient-to-b from-muted/20 to-transparent lg:flex">
+        <div className="flex h-32 items-center justify-center border-b px-6 bg-card/80 backdrop-blur-sm">
+          <BrandMark className="h-24 w-24" />
         </div>
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 flex flex-col justify-center space-y-3 p-4">
           {nav.map((item) => {
             const active = isActive(item.href);
             return (
@@ -112,7 +111,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-24 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur lg:px-6">
+        <header className="sticky top-0 z-30 flex h-32 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur lg:px-6">
           <div className="flex items-center gap-2">
             {/* Mobile nav */}
             <DropdownMenu>
@@ -134,10 +133,9 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
             </DropdownMenu>
             <Link
               href={homeHref}
-              className="flex items-center gap-2 font-display font-semibold tracking-tight lg:hidden"
+              className="flex items-center font-display font-semibold tracking-tight lg:hidden"
             >
-              <BrandMark className="h-14 w-14" animate={false} />
-              <span className="text-xl">Apex</span>
+              <BrandMark className="h-20 w-20" animate={false} />
             </Link>
           </div>
 

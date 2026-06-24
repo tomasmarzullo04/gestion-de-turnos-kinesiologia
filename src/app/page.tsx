@@ -41,10 +41,9 @@ export default function HomePage() {
   return (
     <div className="flex flex-col">
       <header className="border-b">
-        <div className="container flex h-24 items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 font-display font-semibold tracking-tight">
-            <BrandMark className="h-16 w-16" />
-            <span className="text-2xl">Apex</span>
+        <div className="container flex h-32 items-center justify-between">
+          <Link href="/" className="flex items-center font-display font-semibold tracking-tight">
+            <BrandMark className="h-24 w-24" />
           </Link>
           <nav className="flex items-center gap-2">
             <Button variant="ghost" asChild>
