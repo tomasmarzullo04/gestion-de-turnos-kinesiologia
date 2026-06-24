@@ -61,14 +61,15 @@ export async function createTemplateAction(
   }
 }
 
-export async function updateTemplateAction(
-  id: string,
+export async function updateTemplateGroupAction(
+  oldDayOfWeek: number,
+  oldServiceId: string | null,
   input: unknown,
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
     const data = slotTemplateSchema.parse(input);
-    await slotTemplateService.update(id, data);
+    await slotTemplateService.updateGroup(oldDayOfWeek, oldServiceId, data);
     publishTemplateChange();
     return ok(undefined);
   } catch (error) {
@@ -76,13 +77,14 @@ export async function updateTemplateAction(
   }
 }
 
-export async function toggleTemplateActiveAction(
-  id: string,
+export async function toggleTemplateGroupActiveAction(
+  dayOfWeek: number,
+  serviceId: string | null,
   active: boolean,
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
-    await slotTemplateService.setActive(id, active);
+    await slotTemplateService.setActiveGroup(dayOfWeek, serviceId, active);
     publishTemplateChange();
     return ok(undefined);
   } catch (error) {
@@ -90,12 +92,13 @@ export async function toggleTemplateActiveAction(
   }
 }
 
-export async function deleteTemplateAction(
-  id: string,
+export async function deleteTemplateGroupAction(
+  dayOfWeek: number,
+  serviceId: string | null,
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
-    await slotTemplateService.remove(id);
+    await slotTemplateService.removeGroup(dayOfWeek, serviceId);
     publishTemplateChange();
     return ok(undefined);
   } catch (error) {

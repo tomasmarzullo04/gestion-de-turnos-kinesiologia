@@ -62,29 +62,46 @@ export const slotTemplateService = {
   async create(input: SlotTemplateInput): Promise<void> {
     const pid = input.professionalId ?? null;
     const sid = input.serviceId ?? null;
-    await Promise.all(input.daysOfWeek.map(day => prisma.$executeRaw`
-      INSERT INTO slot_templates (professional_id, service_id, day_of_week, start_time, end_time, capacity, active)
-      VALUES (${pid}::uuid, ${sid}::uuid, ${day}, ${input.startTime}::time, ${input.endTime}::time, ${input.capacity}, true)
-    `));
+    const queries: any[] = [];
+    for (const day of input.daysOfWeek) {
+      for (const range of input.ranges) {
+        queries.push(
+          prisma.$executeRaw`
+            INSERT INTO slot_templates (professional_id, service_id, day_of_week, start_time, end_time, capacity, active)
+            VALUES (${pid}::uuid, ${sid}::uuid, ${day}, ${range.startTime}::time, ${range.endTime}::time, ${range.capacity}, true)
+          `
+        );
+      }
+    }
+    await Promise.all(queries);
   },
 
-  async update(id: string, input: SlotTemplateInput): Promise<void> {
-    const pid = input.professionalId ?? null;
-    const sid = input.serviceId ?? null;
-    await prisma.$executeRaw`DELETE FROM slot_templates WHERE id = ${id}::uuid`;
-    await Promise.all(input.daysOfWeek.map(day => prisma.$executeRaw`
-      INSERT INTO slot_templates (professional_id, service_id, day_of_week, start_time, end_time, capacity, active)
-      VALUES (${pid}::uuid, ${sid}::uuid, ${day}, ${input.startTime}::time, ${input.endTime}::time, ${input.capacity}, true)
-    `));
+  async updateGroup(oldDayOfWeek: number, oldServiceId: string | null, input: SlotTemplateInput): Promise<void> {
+    if (oldServiceId) {
+      await prisma.$executeRaw`DELETE FROM slot_templates WHERE day_of_week = ${oldDayOfWeek} AND service_id = ${oldServiceId}::uuid`;
+    } else {
+      await prisma.$executeRaw`DELETE FROM slot_templates WHERE day_of_week = ${oldDayOfWeek} AND service_id IS NULL`;
+    }
+    await this.create(input);
   },
 
-  async setActive(id: string, active: boolean): Promise<void> {
-    await prisma.$executeRaw`
-      UPDATE slot_templates SET active = ${active} WHERE id = ${id}::uuid
-    `;
+  async setActiveGroup(dayOfWeek: number, serviceId: string | null, active: boolean): Promise<void> {
+    if (serviceId) {
+      await prisma.$executeRaw`
+        UPDATE slot_templates SET active = ${active} WHERE day_of_week = ${dayOfWeek} AND service_id = ${serviceId}::uuid
+      `;
+    } else {
+      await prisma.$executeRaw`
+        UPDATE slot_templates SET active = ${active} WHERE day_of_week = ${dayOfWeek} AND service_id IS NULL
+      `;
+    }
   },
 
-  async remove(id: string): Promise<void> {
-    await prisma.$executeRaw`DELETE FROM slot_templates WHERE id = ${id}::uuid`;
+  async removeGroup(dayOfWeek: number, serviceId: string | null): Promise<void> {
+    if (serviceId) {
+      await prisma.$executeRaw`DELETE FROM slot_templates WHERE day_of_week = ${dayOfWeek} AND service_id = ${serviceId}::uuid`;
+    } else {
+      await prisma.$executeRaw`DELETE FROM slot_templates WHERE day_of_week = ${dayOfWeek} AND service_id IS NULL`;
+    }
   },
 };

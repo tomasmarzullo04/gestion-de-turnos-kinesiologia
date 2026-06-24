@@ -11,12 +11,12 @@ import {
 import { toast } from "sonner";
 
 import {
-  deleteTemplateAction,
-  toggleTemplateActiveAction,
+  deleteTemplateGroupAction,
+  toggleTemplateGroupActiveAction,
 } from "@/app/(admin)/actions";
 import {
   TemplateFormDialog,
-  type TemplateDTO,
+  type TemplateGroupDTO,
 } from "@/app/(admin)/admin/plantillas/template-form-dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -45,7 +45,13 @@ import {
 } from "@/components/ui/table";
 import { dayLabel } from "@/lib/constants";
 
-interface TemplateRow extends TemplateDTO {
+export interface TemplateRow {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  serviceId: string | null;
   active: boolean;
   serviceName: string | null;
   serviceColor: string | null;
@@ -59,13 +65,13 @@ export function TemplatesManager({
   services: { id: string; name: string; capacity: number }[];
 }) {
   const [formOpen, setFormOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<TemplateDTO | null>(null);
-  const [deleting, setDeleting] = React.useState<TemplateRow | null>(null);
+  const [editing, setEditing] = React.useState<TemplateGroupDTO | null>(null);
+  const [deleting, setDeleting] = React.useState<TemplateGroupDTO | null>(null);
   const [isPending, startTransition] = React.useTransition();
 
-  function handleToggle(t: TemplateRow) {
+  function handleToggle(t: TemplateGroupDTO) {
     startTransition(async () => {
-      const result = await toggleTemplateActiveAction(t.id, !t.active);
+      const result = await toggleTemplateGroupActiveAction(t.dayOfWeek, t.serviceId, !t.active);
       if (result.success) {
         toast.success(t.active ? "Plantilla desactivada" : "Plantilla activada");
       } else {
@@ -77,18 +83,18 @@ export function TemplatesManager({
   function handleDelete() {
     if (!deleting) return;
     startTransition(async () => {
-      const result = await deleteTemplateAction(deleting.id);
+      const result = await deleteTemplateGroupAction(deleting.dayOfWeek, deleting.serviceId);
       if (result.success) toast.success("Plantilla eliminada");
       else toast.error(result.error);
       setDeleting(null);
     });
   }
 
-  // Agrupar las plantillas por servicio para una vista prolija.
+  // Agrupar las plantillas por servicio, y luego por día.
   const groups = React.useMemo(() => {
     const map = new Map<
       string,
-      { name: string; color: string | null; items: TemplateRow[] }
+      { name: string; color: string | null; days: Map<number, TemplateGroupDTO> }
     >();
     for (const t of templates) {
       const key = t.serviceId ?? "__none__";
@@ -96,12 +102,33 @@ export function TemplatesManager({
         map.set(key, {
           name: t.serviceName ?? "Sin servicio",
           color: t.serviceColor,
-          items: [],
+          days: new Map(),
         });
       }
-      map.get(key)!.items.push(t);
+      
+      const srvGroup = map.get(key)!;
+      if (!srvGroup.days.has(t.dayOfWeek)) {
+        srvGroup.days.set(t.dayOfWeek, {
+          dayOfWeek: t.dayOfWeek,
+          serviceId: t.serviceId,
+          active: t.active,
+          ranges: [],
+        });
+      }
+      
+      srvGroup.days.get(t.dayOfWeek)!.ranges.push({
+        startTime: t.startTime,
+        endTime: t.endTime,
+        capacity: t.capacity,
+      });
     }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    
+    return [...map.values()]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(g => ({
+        ...g,
+        items: [...g.days.values()].sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+      }));
   }, [templates]);
 
   return (
@@ -152,7 +179,7 @@ export function TemplatesManager({
                   {g.name}
                 </CardTitle>
                 <Badge variant="secondary">
-                  {g.items.length} {g.items.length === 1 ? "horario" : "horarios"}
+                  {g.items.length} {g.items.length === 1 ? "día" : "días"}
                 </Badge>
               </CardHeader>
               <CardContent className="p-0">
@@ -160,23 +187,30 @@ export function TemplatesManager({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Día</TableHead>
-                      <TableHead>Horario</TableHead>
-                      <TableHead>Cupos/hora</TableHead>
+                      <TableHead>Franjas Horarias</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead className="w-[1%]">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {g.items.map((t) => (
-                      <TableRow key={t.id}>
+                      <TableRow key={t.dayOfWeek}>
                         <TableCell className="font-medium">
                           {dayLabel(t.dayOfWeek)}
                         </TableCell>
                         <TableCell className="tabular-nums">
-                          {t.startTime} – {t.endTime}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{t.capacity}</Badge>
+                          <div className="flex flex-col gap-2">
+                            {t.ranges.map((r, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="bg-muted px-2 py-1 rounded-md text-sm">
+                                  {r.startTime} – {r.endTime}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  {r.capacity} cupos
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -242,7 +276,7 @@ export function TemplatesManager({
         title="Eliminar plantilla"
         description={
           deleting
-            ? `¿Eliminar el horario de ${dayLabel(deleting.dayOfWeek)} (${deleting.startTime}–${deleting.endTime})? Se quitan las franjas futuras sin reservas; las que ya tienen gente anotada no se tocan.`
+            ? `¿Eliminar la plantilla del ${dayLabel(deleting.dayOfWeek)}? Se quitan las franjas futuras sin reservas; las que ya tienen gente anotada no se tocan.`
             : ""
         }
         confirmLabel="Eliminar"

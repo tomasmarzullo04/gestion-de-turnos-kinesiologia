@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { Plus, Trash2 } from "lucide-react";
 
 import {
   createTemplateAction,
-  updateTemplateAction,
+  updateTemplateGroupAction,
 } from "@/app/(admin)/actions";
 import { SubmitButton } from "@/components/shared/submit-button";
 import { Button } from "@/components/ui/button";
@@ -42,19 +43,21 @@ import {
   type SlotTemplateInput,
 } from "@/lib/validations/slot-template";
 
-export interface TemplateDTO {
-  id: string;
+export interface TemplateGroupDTO {
   dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  capacity: number;
   serviceId: string | null;
+  active: boolean;
+  ranges: {
+    startTime: string;
+    endTime: string;
+    capacity: number;
+  }[];
 }
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  template?: TemplateDTO | null;
+  template?: TemplateGroupDTO | null;
   services: { id: string; name: string; capacity: number }[];
 }
 
@@ -68,10 +71,13 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
       professionalId: null,
       serviceId: null,
       daysOfWeek: [1],
-      startTime: "08:00",
-      endTime: "21:00",
-      capacity: 20,
+      ranges: [{ startTime: "08:00", endTime: "21:00", capacity: 20 }],
     },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "ranges",
   });
 
   React.useEffect(() => {
@@ -80,9 +86,9 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
         professionalId: null,
         serviceId: template?.serviceId ?? null,
         daysOfWeek: template ? [template.dayOfWeek] : [1],
-        startTime: template?.startTime ?? "08:00",
-        endTime: template?.endTime ?? "21:00",
-        capacity: template?.capacity ?? 20,
+        ranges: template?.ranges?.length 
+          ? template.ranges 
+          : [{ startTime: "08:00", endTime: "21:00", capacity: 20 }],
       });
     }
   }, [open, template, form]);
@@ -90,7 +96,7 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
   function onSubmit(values: SlotTemplateInput) {
     startTransition(async () => {
       const result = template
-        ? await updateTemplateAction(template.id, values)
+        ? await updateTemplateGroupAction(template.dayOfWeek, template.serviceId, values)
         : await createTemplateAction(values);
       if (result.success) {
         toast.success(isEditing ? "Plantilla actualizada" : "Plantilla creada");
@@ -103,14 +109,13 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? "Editar plantilla" : "Nueva plantilla"}
           </DialogTitle>
           <DialogDescription>
-            Definí el día, la ventana horaria y la capacidad. La agenda se divide
-            en bloques de 1 hora.
+            Definí el día, la franja horaria y la capacidad. Podés agregar múltiples franjas por día.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -128,7 +133,13 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
                       field.onChange(val);
                       if (val && !isEditing) {
                         const s = services.find((srv) => srv.id === val);
-                        if (s) form.setValue("capacity", s.capacity);
+                        if (s) {
+                           // Set the capacity of the first range to the service's capacity
+                           const currentRanges = form.getValues("ranges");
+                           if (currentRanges.length > 0) {
+                             form.setValue(`ranges.0.capacity`, s.capacity);
+                           }
+                        }
                       }
                     }}
                   >
@@ -188,59 +199,95 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="startTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Desde</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="endTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Hasta</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <FormField
-              control={form.control}
-              name="capacity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Capacidad por franja</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      {...field}
-                      onChange={(e) =>
-                        field.onChange(e.target.valueAsNumber || 0)
-                      }
+            
+            <div className="space-y-4 pt-2">
+              <FormLabel>Franjas Horarias</FormLabel>
+              {fields.map((field, index) => (
+                <div key={field.id} className="p-4 border rounded-md space-y-4 relative bg-muted/20">
+                  {fields.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-2 h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name={`ranges.${index}.startTime`}
+                      render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Desde</FormLabel>
+                          <FormControl>
+                            <Input type="time" {...f} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  </FormControl>
-                  <FormDescription>
-                    Cupos disponibles en cada bloque de 1 hora.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                    <FormField
+                      control={form.control}
+                      name={`ranges.${index}.endTime`}
+                      render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Hasta</FormLabel>
+                          <FormControl>
+                            <Input type="time" {...f} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name={`ranges.${index}.capacity`}
+                    render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Capacidad por hora</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={1000}
+                            {...f}
+                            onChange={(e) =>
+                              f.onChange(e.target.valueAsNumber || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full mt-2 border-dashed"
+                onClick={() => append({ startTime: "08:00", endTime: "12:00", capacity: 20 })}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Agregar franja horaria
+              </Button>
+
+              {form.formState.errors.ranges?.root && (
+                <p className="text-[0.8rem] font-medium text-destructive">
+                  {form.formState.errors.ranges.root.message}
+                </p>
               )}
-            />
-            <div className="flex justify-end gap-2 pt-2">
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
               <Button
                 type="button"
                 variant="outline"
