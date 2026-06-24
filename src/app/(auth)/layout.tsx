@@ -8,14 +8,14 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="container flex h-32 items-center">
-        <Link href="/" className="flex items-center font-display font-semibold tracking-tight">
-          <BrandMark className="h-24 w-24" />
-        </Link>
-      </header>
-      <main className="container flex flex-1 items-center justify-center py-10">
-        <div className="w-full max-w-md animate-fade-in">{children}</div>
+    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-950 py-10">
+      {/* Decorative background blobs for a modern professional look */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-[20%] -right-[10%] h-[600px] w-[600px] rounded-full bg-primary/10 blur-[100px]" />
+        <div className="absolute -bottom-[20%] -left-[10%] h-[600px] w-[600px] rounded-full bg-accent/15 blur-[100px]" />
+      </div>
+      <main className="relative z-10 w-full max-w-md px-4 sm:px-0">
+        {children}
       </main>
     </div>
   );
