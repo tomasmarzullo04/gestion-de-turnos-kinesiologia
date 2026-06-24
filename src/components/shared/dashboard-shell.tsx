@@ -76,7 +76,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
         <div className="flex h-32 items-center justify-center border-b px-6 bg-card/80 backdrop-blur-sm">
           <BrandMark className="h-24 w-24" />
         </div>
-        <nav className="flex-1 flex flex-col justify-center space-y-3 p-4">
+        <nav className="flex-1 space-y-4 p-4 pt-10">
           {nav.map((item) => {
             const active = isActive(item.href);
             return (
