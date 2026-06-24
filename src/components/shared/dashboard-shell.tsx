@@ -36,7 +36,6 @@ interface NavItem {
 
 const ADMIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Agenda", href: "/admin/agenda", icon: CalendarDays },
   { label: "Asistencias", href: "/admin/asistencias", icon: ClipboardCheck },
   { label: "Plantillas", href: "/admin/plantillas", icon: CalendarClock },
   { label: "Pacientes", href: "/admin/pacientes", icon: Users },

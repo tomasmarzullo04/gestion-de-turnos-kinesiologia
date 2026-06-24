@@ -24,7 +24,7 @@ export default async function AdminDashboardPage() {
       <div className="space-y-6 stagger-children">
         <PageHeader title="Dashboard" description="Resumen de la agenda de cupos.">
           <Button asChild>
-            <Link href="/admin/agenda">Ver agenda</Link>
+            <Link href="/admin/asistencias">Asistencias</Link>
           </Button>
         </PageHeader>
         <EmptyState
@@ -61,7 +61,7 @@ export default async function AdminDashboardPage() {
     <div className="space-y-6 stagger-children">
       <PageHeader title="Dashboard" description="Resumen y métricas del estudio.">
         <Button asChild>
-          <Link href="/admin/agenda">Ver agenda</Link>
+          <Link href="/admin/asistencias">Asistencias</Link>
         </Button>
       </PageHeader>
 

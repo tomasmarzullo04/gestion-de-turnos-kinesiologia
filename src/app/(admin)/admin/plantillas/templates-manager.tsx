@@ -1,10 +1,8 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import {
   CalendarClock,
-  CalendarCog,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -24,6 +22,12 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,15 +84,32 @@ export function TemplatesManager({
     });
   }
 
+  // Agrupar las plantillas por servicio para una vista prolija.
+  const groups = React.useMemo(() => {
+    const map = new Map<
+      string,
+      { name: string; color: string | null; items: TemplateRow[] }
+    >();
+    for (const t of templates) {
+      const key = t.serviceId ?? "__none__";
+      if (!map.has(key)) {
+        map.set(key, {
+          name: t.serviceName ?? "Sin servicio",
+          color: t.serviceColor,
+          items: [],
+        });
+      }
+      map.get(key)!.items.push(t);
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [templates]);
+
   return (
     <>
-      <div className="mb-4 flex flex-wrap justify-end gap-2">
-        <Button variant="outline" asChild>
-          <Link href="/admin/agenda">
-            <CalendarCog className="h-4 w-4" />
-            Generar agenda
-          </Link>
-        </Button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Los cambios se publican automáticamente; no hace falta generar nada.
+        </p>
         <Button
           onClick={() => {
             setEditing(null);
@@ -103,8 +124,8 @@ export function TemplatesManager({
       {templates.length === 0 ? (
         <EmptyState
           icon={CalendarClock}
-          title="Todavía no hay plantillas"
-          description="Creá plantillas (día + horario + capacidad) y después generá la agenda."
+          title="Todavía no hay horarios"
+          description="Creá horarios por servicio (día + rango + cupos). Se publican solos en la disponibilidad del socio."
           action={
             <Button
               onClick={() => {
@@ -113,95 +134,98 @@ export function TemplatesManager({
               }}
             >
               <Plus className="h-4 w-4" />
-              Nueva plantilla
+              Nuevo horario
             </Button>
           }
         />
       ) : (
-        <div className="rounded-xl border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Día</TableHead>
-                <TableHead>Servicio</TableHead>
-                <TableHead>Horario</TableHead>
-                <TableHead>Capacidad</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="w-[1%]">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {templates.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-medium">
-                    {dayLabel(t.dayOfWeek)}
-                  </TableCell>
-                  <TableCell>
-                    {t.serviceName ? (
-                      <Badge
-                        variant="outline"
-                        style={{
-                          borderColor: t.serviceColor || undefined,
-                          color: t.serviceColor || undefined,
-                        }}
-                      >
-                        {t.serviceName}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {t.startTime} – {t.endTime}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{t.capacity} cupos</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={t.active}
-                        disabled={isPending}
-                        onCheckedChange={() => handleToggle(t)}
-                        aria-label="Activar/desactivar plantilla"
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {t.active ? "Activa" : "Inactiva"}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Acciones</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setEditing(t);
-                            setFormOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onSelect={() => setDeleting(t)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="space-y-4">
+          {groups.map((g) => (
+            <Card key={g.name}>
+              <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: g.color ?? "#9ca3af" }}
+                    aria-hidden="true"
+                  />
+                  {g.name}
+                </CardTitle>
+                <Badge variant="secondary">
+                  {g.items.length} {g.items.length === 1 ? "horario" : "horarios"}
+                </Badge>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Día</TableHead>
+                      <TableHead>Horario</TableHead>
+                      <TableHead>Cupos/hora</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="w-[1%]">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {g.items.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-medium">
+                          {dayLabel(t.dayOfWeek)}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {t.startTime} – {t.endTime}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{t.capacity}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={t.active}
+                              disabled={isPending}
+                              onCheckedChange={() => handleToggle(t)}
+                              aria-label="Activar/desactivar horario"
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              {t.active ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Acciones</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setEditing(t);
+                                  setFormOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onSelect={() => setDeleting(t)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Eliminar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
@@ -218,7 +242,7 @@ export function TemplatesManager({
         title="Eliminar plantilla"
         description={
           deleting
-            ? `¿Eliminar la plantilla de ${dayLabel(deleting.dayOfWeek)} (${deleting.startTime}–${deleting.endTime})? No afecta las franjas ya generadas.`
+            ? `¿Eliminar el horario de ${dayLabel(deleting.dayOfWeek)} (${deleting.startTime}–${deleting.endTime})? Se quitan las franjas futuras sin reservas; las que ya tienen gente anotada no se tocan.`
             : ""
         }
         confirmLabel="Eliminar"

@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { fromError, ok } from "@/lib/action-result";
 import { assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
+import { logger } from "@/lib/logger";
 import { markAttendanceSchema } from "@/lib/validations/attendance";
 import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
@@ -19,7 +21,30 @@ import { slotService } from "@/server/services/slot.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
 import { type ActionResult } from "@/types";
 
-// ── Plantillas ───────────────────────────────────────────────────────────
+// ── Plantillas (única fuente de verdad: cada cambio re-sincroniza las franjas) ──
+/**
+ * Tras un cambio de plantilla: revalida la vista del profesional al instante y
+ * materializa/sincroniza las franjas futuras en segundo plano con `after()`.
+ *
+ * Así el botón ("Guardando…"/"Eliminando…") responde de inmediato sin esperar a
+ * la generación de los próximos 30 días, mientras la disponibilidad del socio
+ * queda actualizada apenas termina el sync — con los cupos EXACTOS configurados
+ * en la plantilla (única fuente de verdad; sin reglas preestablecidas). El sync
+ * nunca toca franjas con reservas, así que correrlo en segundo plano es seguro.
+ */
+function publishTemplateChange(): void {
+  revalidatePath("/admin/plantillas");
+  after(async () => {
+    try {
+      await generationService.syncFutureSlots();
+      revalidatePath("/portal/reservar");
+      revalidatePath("/admin");
+    } catch (error) {
+      logger.error("Sync de franjas falló tras cambio de plantilla", { error });
+    }
+  });
+}
+
 export async function createTemplateAction(
   input: unknown,
 ): Promise<ActionResult> {
@@ -29,7 +54,7 @@ export async function createTemplateAction(
     const data = slotTemplateSchema.parse(input);
     console.log("createTemplateAction parsed data:", data);
     await slotTemplateService.create(data);
-    revalidatePath("/admin/plantillas");
+    publishTemplateChange();
     return ok(undefined);
   } catch (error) {
     return fromError(error);
@@ -44,7 +69,7 @@ export async function updateTemplateAction(
     await assertRole(ROLES.ADMIN);
     const data = slotTemplateSchema.parse(input);
     await slotTemplateService.update(id, data);
-    revalidatePath("/admin/plantillas");
+    publishTemplateChange();
     return ok(undefined);
   } catch (error) {
     return fromError(error);
@@ -58,38 +83,27 @@ export async function toggleTemplateActiveAction(
   try {
     await assertRole(ROLES.ADMIN);
     await slotTemplateService.setActive(id, active);
-    revalidatePath("/admin/plantillas");
+    publishTemplateChange();
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-export async function deleteTemplateAction(id: string): Promise<ActionResult> {
+export async function deleteTemplateAction(
+  id: string,
+): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
     await slotTemplateService.remove(id);
-    revalidatePath("/admin/plantillas");
+    publishTemplateChange();
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-// ── Generación de agenda ───────────────────────────────────────────────────
-export async function generateAgendaAction(): Promise<ActionResult<number>> {
-  try {
-    await assertRole(ROLES.ADMIN);
-    const created = await generationService.generateAgenda();
-    revalidatePath("/admin/agenda");
-    revalidatePath("/admin");
-    return ok(created);
-  } catch (error) {
-    return fromError(error);
-  }
-}
-
-// ── Franjas (bloquear / desbloquear) ───────────────────────────────────────
+// ── Franjas (bloquear / desbloquear) — usado desde Asistencias ─────────────
 const blockSchema = z.object({
   slotId: z.string().uuid(),
   blocked: z.boolean(),
@@ -102,14 +116,14 @@ export async function toggleSlotBlockedAction(
     await assertRole(ROLES.ADMIN);
     const { slotId, blocked } = blockSchema.parse(input);
     await slotService.setBlocked(slotId, blocked);
-    revalidatePath("/admin/agenda");
+    revalidatePath("/admin/asistencias");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
 }
 
-// ── Reservas (cancelar como admin) ─────────────────────────────────────────
+// ── Reservas (cancelar como admin) — usado desde Asistencias ───────────────
 const adminCancelSchema = z.object({ bookingId: z.string().uuid() });
 
 export async function adminCancelBookingAction(
@@ -119,7 +133,7 @@ export async function adminCancelBookingAction(
     await assertRole(ROLES.ADMIN);
     const { bookingId } = adminCancelSchema.parse(input);
     await bookingService.adminCancel(bookingId);
-    revalidatePath("/admin/agenda");
+    revalidatePath("/admin/asistencias");
     return ok(undefined);
   } catch (error) {
     return fromError(error);
