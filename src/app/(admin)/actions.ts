@@ -1,21 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { fromError, ok } from "@/lib/action-result";
 import { assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
+import { logger } from "@/lib/logger";
 import { markAttendanceSchema } from "@/lib/validations/attendance";
 import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
 import { patientSchema } from "@/lib/validations/patient";
 import { attendanceService } from "@/server/services/attendance.service";
 import { bookingService, type MyBooking } from "@/server/services/booking.service";
-import {
-  generationService,
-  type SyncConflict,
-} from "@/server/services/generation.service";
+import { generationService } from "@/server/services/generation.service";
 import { patientService } from "@/server/services/patient.service";
 import { professionalService } from "@/server/services/professional.service";
 import { slotService } from "@/server/services/slot.service";
@@ -24,26 +23,37 @@ import { type ActionResult } from "@/types";
 
 // ── Plantillas (única fuente de verdad: cada cambio re-sincroniza las franjas) ──
 /**
- * Materializa/actualiza/limpia las franjas futuras según las plantillas activas
- * y revalida. Devuelve los conflictos (franjas con reservas que quedaron
- * huérfanas o por debajo de capacidad) para avisarlos en la UI.
+ * Tras un cambio de plantilla: revalida la vista del profesional al instante y
+ * materializa/sincroniza las franjas futuras en segundo plano con `after()`.
+ *
+ * Así el botón ("Guardando…"/"Eliminando…") responde de inmediato sin esperar a
+ * la generación de los próximos 30 días, mientras la disponibilidad del socio
+ * queda actualizada apenas termina el sync — con los cupos EXACTOS configurados
+ * en la plantilla (única fuente de verdad; sin reglas preestablecidas). El sync
+ * nunca toca franjas con reservas, así que correrlo en segundo plano es seguro.
  */
-async function syncTemplatesAndRevalidate(): Promise<SyncConflict[]> {
-  const sync = await generationService.syncFutureSlots();
+function publishTemplateChange(): void {
   revalidatePath("/admin/plantillas");
-  revalidatePath("/admin");
-  revalidatePath("/portal/reservar");
-  return sync.conflicts;
+  after(async () => {
+    try {
+      await generationService.syncFutureSlots();
+      revalidatePath("/portal/reservar");
+      revalidatePath("/admin");
+    } catch (error) {
+      logger.error("Sync de franjas falló tras cambio de plantilla", { error });
+    }
+  });
 }
 
 export async function createTemplateAction(
   input: unknown,
-): Promise<ActionResult<SyncConflict[]>> {
+): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
     const data = slotTemplateSchema.parse(input);
     await slotTemplateService.create(data);
-    return ok(await syncTemplatesAndRevalidate());
+    publishTemplateChange();
+    return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
@@ -52,12 +62,13 @@ export async function createTemplateAction(
 export async function updateTemplateAction(
   id: string,
   input: unknown,
-): Promise<ActionResult<SyncConflict[]>> {
+): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
     const data = slotTemplateSchema.parse(input);
     await slotTemplateService.update(id, data);
-    return ok(await syncTemplatesAndRevalidate());
+    publishTemplateChange();
+    return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
@@ -66,11 +77,12 @@ export async function updateTemplateAction(
 export async function toggleTemplateActiveAction(
   id: string,
   active: boolean,
-): Promise<ActionResult<SyncConflict[]>> {
+): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
     await slotTemplateService.setActive(id, active);
-    return ok(await syncTemplatesAndRevalidate());
+    publishTemplateChange();
+    return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
@@ -78,11 +90,12 @@ export async function toggleTemplateActiveAction(
 
 export async function deleteTemplateAction(
   id: string,
-): Promise<ActionResult<SyncConflict[]>> {
+): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
     await slotTemplateService.remove(id);
-    return ok(await syncTemplatesAndRevalidate());
+    publishTemplateChange();
+    return ok(undefined);
   } catch (error) {
     return fromError(error);
   }
