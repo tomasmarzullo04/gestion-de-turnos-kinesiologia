@@ -25,7 +25,9 @@ export async function createTemplateAction(
 ): Promise<ActionResult> {
   try {
     await assertRole(ROLES.ADMIN);
+    console.log("createTemplateAction input:", input);
     const data = slotTemplateSchema.parse(input);
+    console.log("createTemplateAction parsed data:", data);
     await slotTemplateService.create(data);
     revalidatePath("/admin/plantillas");
     return ok(undefined);
