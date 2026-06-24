@@ -9,10 +9,10 @@ export default function AuthLayout({
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="container flex h-20 items-center">
+      <header className="container flex h-24 items-center">
         <Link href="/" className="flex items-center gap-3 font-display font-semibold tracking-tight">
-          <BrandMark className="h-12 w-12" />
-          <span className="text-xl">Apex</span>
+          <BrandMark className="h-16 w-16" />
+          <span className="text-2xl">Apex</span>
         </Link>
       </header>
       <main className="container flex flex-1 items-center justify-center py-10">
