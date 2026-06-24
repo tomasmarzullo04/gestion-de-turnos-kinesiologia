@@ -18,7 +18,7 @@ export default async function TemplatesPage() {
     <div>
       <PageHeader
         title="Plantillas"
-        description="Horario del estudio por día y capacidad de cada bloque."
+        description="Configurá los horarios, días y cupos de cada servicio. Los cambios se publican solos."
       />
       <TemplatesManager
         services={services}
