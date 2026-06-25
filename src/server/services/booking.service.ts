@@ -2,9 +2,13 @@ import {
   CANCELLATION_MIN_HOURS,
   ROLES,
   TIMEZONE,
-  isFirstTimeSlotAllowed,
   type Role,
 } from "@/lib/constants";
+import {
+  REHAB_FIRST_TIME_MESSAGE,
+  REHAB_SLUG,
+  isRehabFirstTimeSlotAllowed,
+} from "@/lib/rehab-first-time";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { BusinessError } from "@/server/errors";
@@ -62,8 +66,10 @@ export const bookingService = {
    * forma atómica dentro de `book_slot`; acá solo agregamos un pre-chequeo
    * amable de existencia y de que la franja sea futura.
    *
-   * Si el paciente es `esPrimeraVez`, se aplica la regla de restricción de
-   * días/horarios y se marca el tratamiento de 1 mes.
+   * Para el PRIMER turno de REHAB del paciente se valida la ventana de
+   * días/horarios (ver más abajo). Si el paciente es `esPrimeraVez` (primera
+   * reserva de cualquier servicio) se marca el tratamiento de 1 mes; esa lógica
+   * es independiente de la ventana de REHAB.
    */
   async book(params: {
     slotId: string;
@@ -83,16 +89,21 @@ export const bookingService = {
         end_time: string;
         day_of_week: number;
         start_hour: number;
+        service_id: string | null;
+        service_slug: string | null;
       }[]
     >`
-      SELECT ((date + start_time) AT TIME ZONE ${TIMEZONE}) > now() AS is_future,
-             date::text AS date,
-             to_char(start_time, 'HH24:MI') AS start_time,
-             to_char(end_time, 'HH24:MI') AS end_time,
-             extract(dow FROM date)::int AS day_of_week,
-             extract(hour FROM start_time)::int AS start_hour
-      FROM slots
-      WHERE id = ${slotId}::uuid
+      SELECT ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now() AS is_future,
+             s.date::text AS date,
+             to_char(s.start_time, 'HH24:MI') AS start_time,
+             to_char(s.end_time, 'HH24:MI') AS end_time,
+             extract(dow FROM s.date)::int AS day_of_week,
+             extract(hour FROM s.start_time)::int AS start_hour,
+             s.service_id::text AS service_id,
+             sv.slug AS service_slug
+      FROM slots s
+      LEFT JOIN services sv ON sv.id = s.service_id
+      WHERE s.id = ${slotId}::uuid
     `;
     if (check.length === 0) {
       throw new BusinessError(ERROR_MESSAGES.SLOT_NOT_FOUND);
@@ -102,13 +113,32 @@ export const bookingService = {
       throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
     }
 
-    // ── Regla de primera vez ──────────────────────────────────────────────
-    if (esPrimeraVez) {
-      const allowed = isFirstTimeSlotAllowed(slot.day_of_week, slot.start_hour);
-      if (!allowed) {
-        throw new BusinessError(
-          "Tu primera consulta solo puede ser: Lunes (tarde), Miércoles (todo el día) o Viernes (mañana).",
-        );
+    // ── Regla acotada: PRIMER turno de REHAB ──────────────────────────────
+    // Solo aplica al servicio REHAB y solo si el paciente no tiene NINGUNA
+    // reserva de REHAB en estado CONFIRMED en su historia (las canceladas no
+    // cuentan; por eso filtramos por status). Validamos contra el servicio REAL
+    // de la franja —no un parámetro que el cliente podría falsear—: el servidor
+    // es la verdad y la UI solo oculta lo que igualmente se rechazaría acá.
+    //
+    // Concurrencia: "es primer REHAB" es el estado RESTRICTIVO. Dos primeros
+    // turnos casi simultáneos leen ambos 0 reservas → ambos quedan limitados a
+    // la ventana, así que ninguno fuera de ventana puede colarse. Para saltear
+    // la restricción haría falta una reserva CONFIRMED previa ya commiteada, lo
+    // que no puede ocurrir con operaciones aún no confirmadas.
+    if (slot.service_slug === REHAB_SLUG && slot.service_id) {
+      const prior = await prisma.$queryRaw<{ n: number }[]>`
+        SELECT count(*)::int AS n
+        FROM bookings
+        WHERE user_id = ${userId}::text
+          AND service_id = ${slot.service_id}::uuid
+          AND status = 'CONFIRMED'
+      `;
+      const esPrimerRehab = (prior[0]?.n ?? 0) === 0;
+      if (
+        esPrimerRehab &&
+        !isRehabFirstTimeSlotAllowed(slot.day_of_week, slot.start_hour)
+      ) {
+        throw new BusinessError(REHAB_FIRST_TIME_MESSAGE);
       }
     }
 
@@ -258,6 +288,22 @@ export const bookingService = {
       serviceName: r.service_name,
       serviceColor: r.service_color,
     }));
+  },
+
+  /**
+   * ¿El paciente ya tiene al menos una reserva de REHAB en estado CONFIRMED?
+   * Se usa para saber si la restricción de horarios del PRIMER turno de REHAB
+   * aplica (no aplica si ya tuvo uno). Las canceladas no cuentan.
+   */
+  async hasConfirmedRehab(userId: string): Promise<boolean> {
+    const rows = await prisma.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS n
+      FROM bookings
+      WHERE user_id = ${userId}::text
+        AND service_id = (SELECT id FROM services WHERE slug = ${REHAB_SLUG})
+        AND status = 'CONFIRMED'
+    `;
+    return (rows[0]?.n ?? 0) > 0;
   },
 };
 

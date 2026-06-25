@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { requirePatient } from "@/lib/auth/session";
 import { slotService } from "@/server/services/slot.service";
 import { serviceService } from "@/server/services/service.service";
-import { patientService } from "@/server/services/patient.service";
+import { bookingService } from "@/server/services/booking.service";
 
 export const metadata: Metadata = { title: "Reservar turno" };
 export const dynamic = "force-dynamic";
@@ -13,13 +13,15 @@ export const dynamic = "force-dynamic";
 export default async function BookingPage() {
   const user = await requirePatient();
 
-  const [days, services, profile] = await Promise.all([
+  const [days, services, hasRehab] = await Promise.all([
     slotService.getUpcomingDays(),
     serviceService.listActive(),
-    patientService.getPatientProfile(user.id),
+    bookingService.hasConfirmedRehab(user.id),
   ]);
 
-  const esPrimeraVez = profile?.esPrimeraVez ?? false;
+  // Restricción de horarios SOLO para el primer turno de REHAB (si nunca tuvo
+  // uno confirmado). No afecta a ningún otro servicio.
+  const esPrimerRehab = !hasRehab;
 
   // Ya no obtenemos initialSlots por defecto porque dependemos del servicio
   // que seleccione el paciente en el paso 1.
@@ -35,7 +37,7 @@ export default async function BookingPage() {
         days={days}
         initialDate={null}
         initialSlots={[]}
-        esPrimeraVez={esPrimeraVez}
+        esPrimerRehab={esPrimerRehab}
       />
     </div>
   );

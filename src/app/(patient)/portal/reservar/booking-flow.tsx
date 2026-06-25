@@ -27,7 +27,12 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { parseLocalDateKey } from "@/lib/datetime";
-import { isFirstTimeDayAllowed, isFirstTimeSlotAllowed } from "@/lib/constants";
+import {
+  REHAB_FIRST_TIME_EMPTY,
+  REHAB_SLUG,
+  isRehabFirstTimeDayAllowed,
+  isRehabFirstTimeSlotAllowed,
+} from "@/lib/rehab-first-time";
 import { cn } from "@/lib/utils";
 import { type DayAvailability, type SlotView } from "@/server/services/slot.service";
 
@@ -36,7 +41,8 @@ interface Props {
   days: DayAvailability[];
   initialDate: string | null;
   initialSlots: SlotView[];
-  esPrimeraVez: boolean;
+  /** El paciente nunca tuvo un turno de REHAB confirmado → aplica la ventana. */
+  esPrimerRehab: boolean;
 }
 
 const StepHeader = React.memo(function StepHeader({
@@ -63,7 +69,7 @@ const StepHeader = React.memo(function StepHeader({
   );
 });
 
-export function BookingFlow({ services, days: initialDays, initialDate, initialSlots, esPrimeraVez }: Props) {
+export function BookingFlow({ services, days: initialDays, initialDate, initialSlots, esPrimerRehab }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
@@ -86,29 +92,37 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
   // Cupos en vivo (Realtime).
   useRealtimeSlots(selectedDate, setSlots);
 
-  // ── Filtrado de días por regla de primera vez ──────────────────────────
+  // La restricción de horarios aplica SOLO al primer turno de REHAB: cuando el
+  // servicio elegido es REHAB y el paciente nunca tuvo uno confirmado. Cualquier
+  // otro servicio (o un REHAB que no sea el primero) no tiene restricción.
+  const restrictRehab =
+    Boolean(selectedService) &&
+    selectedService!.slug === REHAB_SLUG &&
+    esPrimerRehab;
+
+  // ── Filtrado de días por la ventana del primer REHAB ───────────────────
   const filteredDays = React.useMemo(() => {
-    if (!esPrimeraVez) return days;
+    if (!restrictRehab) return days;
     return days.filter((day) => {
       const d = parseLocalDateKey(day.date);
-      return isFirstTimeDayAllowed(d.getDay());
+      return isRehabFirstTimeDayAllowed(d.getDay());
     });
-  }, [days, esPrimeraVez]);
+  }, [days, restrictRehab]);
 
-  // ── Filtrado de slots por regla de primera vez ─────────────────────────
+  // ── Filtrado de slots por la ventana del primer REHAB ──────────────────
   const filteredSlots = React.useMemo(() => {
-    if (!esPrimeraVez || !selectedDate) return slots;
+    if (!restrictRehab || !selectedDate) return slots;
     const d = parseLocalDateKey(selectedDate);
     const dayOfWeek = d.getDay();
     return slots.map((slot) => {
       const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
-      const allowed = isFirstTimeSlotAllowed(dayOfWeek, hour);
+      const allowed = isRehabFirstTimeSlotAllowed(dayOfWeek, hour);
       if (!allowed) {
         return { ...slot, available: false, isBlocked: true };
       }
       return slot;
     });
-  }, [slots, esPrimeraVez, selectedDate]);
+  }, [slots, restrictRehab, selectedDate]);
 
   // ── Fetch de días cuando cambia el servicio ────────────────────────────
   const fetchDays = React.useCallback(async (serviceId: string) => {
@@ -249,17 +263,19 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
 
   return (
     <div className="space-y-4">
-      {/* Banner de primera vez */}
-      {esPrimeraVez && (
+      {/* Banner del primer turno de REHAB (solo si aplica la ventana) */}
+      {restrictRehab && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-950/30">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
             <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-              Esta es tu primera consulta
+              Tu primer turno de rehabilitación
             </p>
             <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
-              Los horarios disponibles están limitados a: <strong>Lunes (tarde)</strong>,{" "}
-              <strong>Miércoles (todo el día)</strong> o <strong>Viernes (mañana)</strong>.
+              Debe ser <strong>lunes a la tarde</strong>,{" "}
+              <strong>miércoles</strong> (todo el día) o{" "}
+              <strong>viernes a la mañana</strong>. A partir del segundo turno no
+              hay restricción.
             </p>
           </div>
         </div>
@@ -289,7 +305,9 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
             </div>
           ) : filteredDays.length === 0 ? (
             <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No hay días disponibles para este servicio.
+              {restrictRehab
+                ? REHAB_FIRST_TIME_EMPTY
+                : "No hay días disponibles para este servicio."}
             </p>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-2">
@@ -343,10 +361,13 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
       <Card className={cn("transition-opacity duration-300", !selectedDate && "opacity-55")}>
         <CardContent className="space-y-4 p-5 sm:p-6">
           <StepHeader step={3} title="Elegí el horario" done={Boolean(selectedSlot)} />
-          {esPrimeraVez && selectedDate && (
+          {restrictRehab && selectedDate && (
             <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5" />
-              <span>Los horarios bloqueados no aplican para primera consulta.</span>
+              <span>
+                Para tu primer turno de rehabilitación, los horarios fuera de la
+                ventana permitida están deshabilitados.
+              </span>
             </div>
           )}
           {loadingSlots ? (
