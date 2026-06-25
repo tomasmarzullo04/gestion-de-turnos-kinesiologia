@@ -69,7 +69,7 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
     resolver: zodResolver(slotTemplateSchema),
     defaultValues: {
       professionalId: null,
-      serviceId: null,
+      serviceId: "",
       daysOfWeek: [1],
       ranges: [{ startTime: "08:00", endTime: "21:00", capacity: 20 }],
     },
@@ -84,7 +84,7 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
     if (open) {
       form.reset({
         professionalId: null,
-        serviceId: template?.serviceId ?? null,
+        serviceId: template?.serviceId ?? "",
         daysOfWeek: template ? [template.dayOfWeek] : [1],
         ranges: template?.ranges?.length 
           ? template.ranges 
@@ -127,18 +127,17 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
                 <FormItem>
                   <FormLabel>Servicio</FormLabel>
                   <Select
-                    value={field.value ?? "none"}
-                    onValueChange={(v) => {
-                      const val = v === "none" ? null : v;
+                    value={field.value || ""}
+                    onValueChange={(val) => {
                       field.onChange(val);
                       if (val && !isEditing) {
                         const s = services.find((srv) => srv.id === val);
                         if (s) {
-                           // Set the capacity of the first range to the service's capacity
-                           const currentRanges = form.getValues("ranges");
-                           if (currentRanges.length > 0) {
-                             form.setValue(`ranges.0.capacity`, s.capacity);
-                           }
+                          // Capacidad por defecto de la primera franja = la del servicio.
+                          const currentRanges = form.getValues("ranges");
+                          if (currentRanges.length > 0) {
+                            form.setValue(`ranges.0.capacity`, s.capacity);
+                          }
                         }
                       }
                     }}
@@ -149,7 +148,6 @@ export function TemplateFormDialog({ open, onOpenChange, template, services }: P
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="none">Ninguno (General)</SelectItem>
                       {services.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name}

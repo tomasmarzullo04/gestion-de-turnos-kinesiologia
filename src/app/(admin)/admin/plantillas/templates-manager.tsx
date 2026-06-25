@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { dayLabel } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
 export interface TemplateRow {
   id: string;
@@ -56,6 +57,17 @@ export interface TemplateRow {
   serviceName: string | null;
   serviceColor: string | null;
 }
+
+// Anchos de columna FIJOS y COMPARTIDOS por todos los bloques de servicio. Con
+// `table-fixed` (abajo) estos anchos mandan sobre el contenido, así "Estado" y
+// "Acciones" caen siempre en la misma posición horizontal sin importar el
+// servicio. "Franjas Horarias" no lleva ancho: absorbe el espacio restante.
+const COLS = {
+  dia: "w-28",
+  franjas: "",
+  estado: "w-44",
+  acciones: "w-16",
+} as const;
 
 export function TemplatesManager({
   templates,
@@ -90,22 +102,25 @@ export function TemplatesManager({
     });
   }
 
-  // Agrupar las plantillas por servicio, y luego por día.
+  // Agrupar las plantillas por servicio, y luego por día. Las plantillas sin
+  // servicio (residuo del modelo genérico anterior) NO se muestran: toda
+  // plantilla válida pertenece a un servicio.
   const groups = React.useMemo(() => {
     const map = new Map<
       string,
       { name: string; color: string | null; days: Map<number, TemplateGroupDTO> }
     >();
     for (const t of templates) {
-      const key = t.serviceId ?? "__none__";
+      if (!t.serviceId) continue;
+      const key = t.serviceId;
       if (!map.has(key)) {
         map.set(key, {
-          name: t.serviceName ?? "Sin servicio",
+          name: t.serviceName ?? "Servicio",
           color: t.serviceColor,
           days: new Map(),
         });
       }
-      
+
       const srvGroup = map.get(key)!;
       if (!srvGroup.days.has(t.dayOfWeek)) {
         srvGroup.days.set(t.dayOfWeek, {
@@ -148,7 +163,7 @@ export function TemplatesManager({
         </Button>
       </div>
 
-      {templates.length === 0 ? (
+      {groups.length === 0 ? (
         <EmptyState
           icon={CalendarClock}
           title="Todavía no hay horarios"
@@ -183,22 +198,25 @@ export function TemplatesManager({
                 </Badge>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
+                <div className="overflow-x-auto">
+                  <Table className="w-full table-fixed min-w-[640px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Día</TableHead>
-                      <TableHead>Franjas Horarias</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="w-[1%]">Acciones</TableHead>
+                      <TableHead className={COLS.dia}>Día</TableHead>
+                      <TableHead className={COLS.franjas}>Franjas Horarias</TableHead>
+                      <TableHead className={COLS.estado}>Estado</TableHead>
+                      <TableHead className={COLS.acciones}>
+                        <span className="sr-only">Acciones</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {g.items.map((t) => (
                       <TableRow key={t.dayOfWeek}>
-                        <TableCell className="font-medium">
+                        <TableCell className={cn("font-medium", COLS.dia)}>
                           {dayLabel(t.dayOfWeek)}
                         </TableCell>
-                        <TableCell className="tabular-nums">
+                        <TableCell className={cn("tabular-nums", COLS.franjas)}>
                           <div className="flex flex-col gap-2">
                             {t.ranges.map((r, i) => (
                               <div key={i} className="flex items-center gap-2">
@@ -212,7 +230,7 @@ export function TemplatesManager({
                             ))}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className={COLS.estado}>
                           <div className="flex items-center gap-2">
                             <Switch
                               checked={t.active}
@@ -225,7 +243,7 @@ export function TemplatesManager({
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className={COLS.acciones}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon">
@@ -256,7 +274,8 @@ export function TemplatesManager({
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           ))}

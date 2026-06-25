@@ -24,7 +24,9 @@ const rangeSchema = z
 export const slotTemplateSchema = z
   .object({
     professionalId: z.string().uuid().nullable().optional(),
-    serviceId: z.string().uuid().nullable().optional(),
+    // El servicio es obligatorio: toda plantilla pertenece a un servicio. Así
+    // no se vuelve a generar el grupo residual "Sin servicio".
+    serviceId: z.string().uuid("Seleccioná un servicio"),
     daysOfWeek: z
       .array(z.number().int().min(0).max(6), {
         invalid_type_error: "Seleccioná al menos un día",
