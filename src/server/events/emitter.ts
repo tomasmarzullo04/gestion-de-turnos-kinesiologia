@@ -31,6 +31,14 @@ export async function emitEvent(
     timestamp: new Date().toISOString(),
     data,
   });
+  if (!secret) {
+    // Sin secreto el header X-Signature va vacío y n8n no puede verificar nada.
+    // Avisamos en vez de fallar en silencio: el evento igual se emite.
+    logger.warn(
+      "WEBHOOK_SECRET no configurado; el evento se envía SIN firmar (X-Signature vacío)",
+      { event },
+    );
+  }
   const signature = secret
     ? createHmac("sha256", secret).update(body).digest("hex")
     : "";

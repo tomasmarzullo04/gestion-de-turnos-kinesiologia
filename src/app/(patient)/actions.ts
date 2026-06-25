@@ -15,6 +15,7 @@ import { profileSchema } from "@/lib/validations/auth";
 import { emitEvent } from "@/server/events/emitter";
 import { bookingService } from "@/server/services/booking.service";
 import { patientService } from "@/server/services/patient.service";
+import { serviceService } from "@/server/services/service.service";
 import { userRepository } from "@/server/repositories/user.repository";
 import { type ActionResult } from "@/types";
 
@@ -48,8 +49,12 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult<{ isF
     // su respuesta y su fallo nunca afecta la reserva ya confirmada.
     if (booking.bookingId) {
       const bookingId = booking.bookingId;
-      after(() =>
-        emitEvent(
+      after(async () => {
+        // Resolvemos el servicio a su NOMBRE legible (el que ve el paciente)
+        // para que el mail de confirmación lo muestre. Mandamos { id, name }:
+        // se conserva el id por si algún consumidor lo necesita.
+        const service = await serviceService.findById(data.serviceId);
+        await emitEvent(
           "appointment.confirmed",
           {
             booking: {
@@ -58,13 +63,16 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult<{ isF
               startTime: booking.startTime,
               endTime: booking.endTime,
             },
-            service: data.serviceId,
+            service: {
+              id: data.serviceId,
+              name: service?.name ?? null,
+            },
             patient: { name: user.name, email: user.email },
             isFirstTime: booking.isFirstTime,
           },
           `${bookingId}:appointment.confirmed`,
-        ),
-      );
+        );
+      });
     }
 
     revalidatePath("/portal");

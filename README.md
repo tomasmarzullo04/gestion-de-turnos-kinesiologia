@@ -151,8 +151,9 @@ Body:
   "timestamp": "2026-01-01T12:00:00.000Z",
   "data": {
     "booking": { "id": "...", "date": "2026-01-01", "startTime": "08:00", "endTime": "09:00" },
-    "service": "entrenamiento",
-    "patient": { "name": "...", "email": "..." }
+    "service": { "id": "9b59acdb-...", "name": "Rehab" },
+    "patient": { "name": "...", "email": "..." },
+    "isFirstTime": false
   }
 }
 ```
