@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+
+import { addDays, format } from "date-fns";
+
 import {
   CANCELLATION_MIN_HOURS,
   ROLES,
@@ -9,6 +13,7 @@ import {
   REHAB_SLUG,
   isRehabFirstTimeSlotAllowed,
 } from "@/lib/rehab-first-time";
+import { parseLocalDateKey, toLocalDateKey } from "@/lib/datetime";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { BusinessError } from "@/server/errors";
@@ -270,6 +275,21 @@ export const bookingService = {
       WHERE b.user_id = ${userId}::text
       ORDER BY s.date DESC, s.start_time DESC
     `;
+
+    // Agrupación de series (turnos fijos). Resiliente: si la columna aún no
+    // existe (migración pendiente), no hay series y la lista no se rompe.
+    let recMap = new Map<string, string>();
+    try {
+      const rec = await prisma.$queryRaw<{ id: string; recurrence_id: string | null }[]>`
+        SELECT id, recurrence_id::text AS recurrence_id
+        FROM bookings
+        WHERE user_id = ${userId}::text AND recurrence_id IS NOT NULL
+      `;
+      recMap = new Map(rec.filter((r) => r.recurrence_id).map((r) => [r.id, r.recurrence_id!]));
+    } catch {
+      recMap = new Map();
+    }
+
     return rows.map((r) => ({
       id: r.id,
       status: r.status,
@@ -280,6 +300,7 @@ export const bookingService = {
       startsAtISO: r.starts_at.toISOString(),
       serviceName: r.service_name,
       serviceColor: r.service_color,
+      recurrenceId: recMap.get(r.id) ?? null,
     }));
   },
 
@@ -309,7 +330,169 @@ export const bookingService = {
     `;
     return rows[0]?.ok ?? false;
   },
+
+  /** Horarios de inicio disponibles (distintos) de un servicio a futuro. */
+  async getServiceStartTimes(serviceId: string): Promise<string[]> {
+    const rows = await prisma.$queryRaw<{ start_time: string }[]>`
+      SELECT DISTINCT to_char(start_time, 'HH24:MI') AS start_time
+      FROM slots
+      WHERE service_id = ${serviceId}::uuid
+        AND date >= current_date
+        AND NOT is_blocked
+      ORDER BY start_time
+    `;
+    return rows.map((r) => r.start_time);
+  },
+
+  /**
+   * Turno fijo: genera una reserva por cada fecha del rango cuyo día de la
+   * semana esté en `daysOfWeek`, al horario `startTime`, para el servicio dado.
+   *
+   * Cada fecha se reserva con `book_slot` (lock atómico) → no sobre-reserva. La
+   * generación es secuencial (sin transacción gigante). Las fechas sin cupo o
+   * sin franja NO abortan la operación: se reportan por separado. Respeta la
+   * regla del primer turno de REHAB (cada fecha debe caer en ventana mientras el
+   * paciente no esté libre).
+   */
+  async bookSeries(params: {
+    userId: string;
+    serviceId: string;
+    daysOfWeek: number[];
+    startTime: string;
+    toDate: string;
+    notes?: string | null;
+  }): Promise<SeriesResult> {
+    const { userId, serviceId, daysOfWeek, startTime, toDate, notes } = params;
+
+    // Guardia: la columna recurrence_id debe existir (migración aplicada).
+    try {
+      await prisma.$queryRaw`SELECT recurrence_id FROM bookings LIMIT 1`;
+    } catch {
+      throw new BusinessError(
+        "Los turnos fijos no están disponibles todavía. Probá más tarde.",
+      );
+    }
+
+    const today = parseLocalDateKey(toLocalDateKey(new Date()));
+    const end = parseLocalDateKey(toDate);
+    if (end < today) {
+      throw new BusinessError("La fecha final ya pasó. Elegí una fecha futura.");
+    }
+    // Horizonte máximo para no generar series gigantes.
+    const maxEnd = addDays(today, 120);
+    const lastDate = end > maxEnd ? maxEnd : end;
+
+    // ¿Es REHAB? ¿El paciente está libre de la restricción de ventana?
+    const svc = await prisma.$queryRaw<{ slug: string }[]>`
+      SELECT slug FROM services WHERE id = ${serviceId}::uuid
+    `;
+    const isRehab = svc[0]?.slug === REHAB_SLUG;
+    const rehabLibre = isRehab ? await this.puedeReservarRehabLibre(userId) : true;
+
+    const recurrenceId = randomUUID();
+    const days = new Set(daysOfWeek);
+    const results: SeriesItemResult[] = [];
+
+    for (let d = today; d <= lastDate; d = addDays(d, 1)) {
+      if (!days.has(d.getDay())) continue;
+      const dateKey = format(d, "yyyy-MM-dd");
+
+      const slotRows = await prisma.$queryRaw<
+        { id: string; end_time: string; dow: number; hour: number }[]
+      >`
+        SELECT s.id,
+               to_char(s.end_time, 'HH24:MI') AS end_time,
+               extract(dow FROM s.date)::int AS dow,
+               extract(hour FROM s.start_time)::int AS hour
+        FROM slots s
+        WHERE s.service_id = ${serviceId}::uuid
+          AND s.date = ${dateKey}::date
+          AND s.start_time = ${startTime}::time
+          AND NOT s.is_blocked
+          AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+      `;
+      const slot = slotRows[0];
+      if (!slot) {
+        results.push({ date: dateKey, startTime, endTime: null, status: "no_slot" });
+        continue;
+      }
+
+      if (isRehab && !rehabLibre && !isRehabFirstTimeSlotAllowed(slot.dow, slot.hour)) {
+        results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "rehab_window" });
+        continue;
+      }
+
+      try {
+        const booked = await prisma.$queryRaw<{ booking_id: string | null }[]>`
+          SELECT b.id AS booking_id
+          FROM book_slot(${slot.id}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+        `;
+        const bookingId = booked[0]?.booking_id ?? null;
+        if (bookingId) {
+          await prisma.$executeRaw`
+            UPDATE bookings SET recurrence_id = ${recurrenceId}::uuid WHERE id = ${bookingId}::uuid
+          `;
+        }
+        results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "booked" });
+      } catch (error) {
+        const msg = String((error as { message?: string })?.message ?? error);
+        const status: SeriesItemStatus = msg.includes("SLOT_FULL")
+          ? "full"
+          : msg.includes("ALREADY_BOOKED")
+            ? "already"
+            : "error";
+        results.push({ date: dateKey, startTime, endTime: slot.end_time, status });
+      }
+    }
+
+    const booked = results.filter((r) => r.status === "booked").length;
+    logger.info("Serie creada", { userId, serviceId, recurrenceId, booked, total: results.length });
+    return { recurrenceId, results, booked, total: results.length };
+  },
+
+  /** Cancela todas las reservas FUTURAS de una serie (las pasadas no se tocan). */
+  async cancelSeries(params: { recurrenceId: string; userId: string }): Promise<number> {
+    const { recurrenceId, userId } = params;
+    const future = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT b.id
+      FROM bookings b
+      JOIN slots s ON s.id = b.slot_id
+      WHERE b.recurrence_id = ${recurrenceId}::uuid
+        AND b.user_id = ${userId}::text
+        AND b.status <> 'CANCELLED'
+        AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) >= now()
+    `;
+    for (const row of future) {
+      await prisma.$executeRaw`
+        SELECT cancel_booking(${row.id}::uuid, ${userId}::text)
+      `;
+    }
+    logger.info("Serie cancelada", { recurrenceId, userId, cancelled: future.length });
+    return future.length;
+  },
 };
+
+export type SeriesItemStatus =
+  | "booked"
+  | "no_slot"
+  | "full"
+  | "already"
+  | "rehab_window"
+  | "error";
+
+export interface SeriesItemResult {
+  date: string;
+  startTime: string;
+  endTime: string | null;
+  status: SeriesItemStatus;
+}
+
+export interface SeriesResult {
+  recurrenceId: string;
+  results: SeriesItemResult[];
+  booked: number;
+  total: number;
+}
 
 export interface BookResult {
   bookingId: string | null;
@@ -329,4 +512,5 @@ export interface MyBooking {
   startsAtISO: string;
   serviceName: string | null;
   serviceColor: string | null;
+  recurrenceId: string | null;
 }

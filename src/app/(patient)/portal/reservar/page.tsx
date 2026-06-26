@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
-import { BookingFlow } from "@/app/(patient)/portal/reservar/booking-flow";
+import { ReservarTabs } from "@/app/(patient)/portal/reservar/reservar-tabs";
 import { PageHeader } from "@/components/shared/page-header";
 import { requirePatient } from "@/lib/auth/session";
+import { toLocalDateKey } from "@/lib/datetime";
 import { slotService } from "@/server/services/slot.service";
 import { serviceService } from "@/server/services/service.service";
 import { bookingService } from "@/server/services/booking.service";
@@ -23,21 +24,24 @@ export default async function BookingPage() {
   // asistió a una sesión (asistencia PRESENT). No afecta a otros servicios.
   const esPrimerRehab = !rehabLibre;
 
-  // Ya no obtenemos initialSlots por defecto porque dependemos del servicio
-  // que seleccione el paciente en el paso 1.
+  // Fecha de hoy y último día del mes (default para el "turno fijo").
+  const todayKey = toLocalDateKey(new Date());
+  const [y, m] = todayKey.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const defaultToDate = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
   return (
     <div>
       <PageHeader
         title="Reservar turno"
-        description="Elegí el servicio, el día y el horario con cupo."
+        description="Reservá un turno único o un turno fijo recurrente."
       />
-      <BookingFlow
+      <ReservarTabs
         services={services}
         days={days}
-        initialDate={null}
-        initialSlots={[]}
         esPrimerRehab={esPrimerRehab}
+        todayKey={todayKey}
+        defaultToDate={defaultToDate}
       />
     </div>
   );

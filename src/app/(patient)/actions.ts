@@ -8,12 +8,17 @@ import { assertAuthenticated, assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
 import { rateLimit } from "@/lib/rate-limit";
 import {
+  bookSeriesSchema,
   bookSlotSchema,
   cancelBookingSchema,
+  cancelSeriesSchema,
 } from "@/lib/validations/booking";
 import { profileSchema } from "@/lib/validations/auth";
 import { emitEvent } from "@/server/events/emitter";
-import { bookingService } from "@/server/services/booking.service";
+import {
+  bookingService,
+  type SeriesResult,
+} from "@/server/services/booking.service";
 import { patientService } from "@/server/services/patient.service";
 import { serviceService } from "@/server/services/service.service";
 import { userRepository } from "@/server/repositories/user.repository";
@@ -109,6 +114,74 @@ export async function cancelBookingAction(
     revalidatePath("/portal");
     revalidatePath("/portal/turnos");
     return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Turno fijo (serie recurrente): reserva una franja por cada fecha del rango. */
+export async function bookSeriesAction(
+  input: unknown,
+): Promise<ActionResult<SeriesResult>> {
+  try {
+    const user = await assertRole(ROLES.PATIENT);
+
+    if (await patientService.isArchived(user.id)) {
+      return fail("Tu cuenta está inactiva. Contactá a recepción.");
+    }
+
+    // Rate limit: pocas series por hora (cada una genera muchas reservas).
+    const limit = rateLimit(`series:${user.id}`, 3, 60 * 60 * 1000);
+    if (!limit.success) {
+      return fail(`Demasiadas series seguidas. Reintentá en ${limit.retryAfter}s.`);
+    }
+
+    const data = bookSeriesSchema.parse(input);
+    const result = await bookingService.bookSeries({
+      userId: user.id,
+      serviceId: data.serviceId,
+      daysOfWeek: data.daysOfWeek,
+      startTime: data.startTime,
+      toDate: data.toDate,
+      notes: data.notes || null,
+    });
+
+    revalidatePath("/portal");
+    revalidatePath("/portal/reservar");
+    revalidatePath("/portal/turnos");
+    return ok(result);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Horarios de inicio disponibles para un servicio (para armar el turno fijo). */
+export async function getServiceStartTimesAction(
+  serviceId: string,
+): Promise<ActionResult<string[]>> {
+  try {
+    await assertRole(ROLES.PATIENT);
+    const times = await bookingService.getServiceStartTimes(serviceId);
+    return ok(times);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Cancela toda una serie (turnos futuros; los pasados no se tocan). */
+export async function cancelSeriesAction(
+  input: unknown,
+): Promise<ActionResult<{ cancelled: number }>> {
+  try {
+    const user = await assertRole(ROLES.PATIENT);
+    const { recurrenceId } = cancelSeriesSchema.parse(input);
+    const cancelled = await bookingService.cancelSeries({
+      recurrenceId,
+      userId: user.id,
+    });
+    revalidatePath("/portal");
+    revalidatePath("/portal/turnos");
+    return ok({ cancelled });
   } catch (error) {
     return fromError(error);
   }
