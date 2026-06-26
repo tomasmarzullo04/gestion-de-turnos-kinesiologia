@@ -16,13 +16,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatARS, monthName } from "@/lib/money";
+import { formatARS } from "@/lib/money";
 
 export interface CopagoPatient {
   id: string;
   name: string;
+  copagoAttended: number;
   copagoPaid: number;
-  copagoExpected: number;
 }
 
 interface Props {
@@ -30,7 +30,6 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   patient: CopagoPatient | null;
   copagoAmount: number;
-  period: { month: number; year: number };
   todayKey: string;
 }
 
@@ -39,7 +38,6 @@ export function CopagoDialog({
   onOpenChange,
   patient,
   copagoAmount,
-  period,
   todayKey,
 }: Props) {
   const [isPending, startTransition] = React.useTransition();
@@ -47,14 +45,14 @@ export function CopagoDialog({
   const [unitAmount, setUnitAmount] = React.useState(copagoAmount);
   const [paidAt, setPaidAt] = React.useState(todayKey);
 
-  const remaining = patient
-    ? Math.max(0, patient.copagoExpected - patient.copagoPaid)
-    : 0;
+  const attended = patient?.copagoAttended ?? 0;
+  const paid = patient?.copagoPaid ?? 0;
+  const owed = Math.max(0, attended - paid);
 
-  // Al abrir, precargar cantidad pendiente (mín. 1) y el monto vigente.
+  // Al abrir: precargar la deuda completa (mín. 1) y el monto vigente.
   React.useEffect(() => {
     if (open) {
-      setQuantity(Math.max(1, remaining));
+      setQuantity(Math.max(1, owed));
       setUnitAmount(copagoAmount);
       setPaidAt(todayKey);
     }
@@ -69,8 +67,6 @@ export function CopagoDialog({
         userId: patient.id,
         quantity,
         unitAmount,
-        periodMonth: period.month,
-        periodYear: period.year,
         paidAt,
       });
       if (result.success) {
@@ -84,84 +80,104 @@ export function CopagoDialog({
     });
   }
 
-  const total = (Number.isFinite(quantity) ? quantity : 0) *
-    (Number.isFinite(unitAmount) ? unitAmount : 0);
+  const qty = Number.isFinite(quantity) ? quantity : 0;
+  const unit = Number.isFinite(unitAmount) ? unitAmount : 0;
+  const total = qty * unit;
+  const remainingAfter = Math.max(0, owed - qty);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Registrar copago</DialogTitle>
-          <DialogDescription>
-            {patient?.name} · {monthName(period.month)} {period.year}
-          </DialogDescription>
+          <DialogDescription>{patient?.name}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Resumen claro de la deuda */}
           <div className="rounded-lg border bg-muted/30 p-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Turnos del mes</span>
-              <span className="font-medium tabular-nums">
-                {patient?.copagoExpected ?? 0}
-              </span>
+              <span className="text-muted-foreground">Asistió a</span>
+              <span className="font-medium tabular-nums">{attended} sesiones</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Copagos pagados</span>
-              <span className="font-medium tabular-nums">
-                {patient?.copagoPaid ?? 0}
+              <span className="text-muted-foreground">Pagó</span>
+              <span className="font-medium tabular-nums">{paid} copagos</span>
+            </div>
+            <div className="mt-1 flex justify-between border-t pt-1">
+              <span className="font-medium">Debe</span>
+              <span className="font-semibold tabular-nums">
+                {owed} {owed === 1 ? "copago" : "copagos"} ={" "}
+                {formatARS(owed * copagoAmount)}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Pendientes</span>
-              <span className="font-medium tabular-nums">{remaining}</span>
-            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="copago-qty">Cantidad de copagos</Label>
-              <Input
-                id="copago-qty"
-                type="number"
-                min={1}
-                max={60}
-                value={Number.isFinite(quantity) ? quantity : ""}
-                onChange={(e) => setQuantity(Math.trunc(e.target.valueAsNumber))}
-              />
-              {remaining > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Podés saldar el mes: {remaining} pendiente{remaining === 1 ? "" : "s"}.
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="copago-amount">Monto por copago</Label>
-              <Input
-                id="copago-amount"
-                type="number"
-                min={0}
-                value={Number.isFinite(unitAmount) ? unitAmount : ""}
-                onChange={(e) => setUnitAmount(Math.trunc(e.target.valueAsNumber))}
-              />
-            </div>
-          </div>
+          {owed === 0 ? (
+            <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+              Este paciente está al día. No tiene copagos pendientes.
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="copago-qty">Copagos a pagar</Label>
+                  <Input
+                    id="copago-qty"
+                    type="number"
+                    min={1}
+                    max={owed}
+                    value={Number.isFinite(quantity) ? quantity : ""}
+                    onChange={(e) =>
+                      setQuantity(
+                        Math.min(owed, Math.max(1, Math.trunc(e.target.valueAsNumber))),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setQuantity(owed)}
+                  >
+                    Saldar todo ({owed})
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="copago-amount">Monto por copago</Label>
+                  <Input
+                    id="copago-amount"
+                    type="number"
+                    min={0}
+                    value={Number.isFinite(unitAmount) ? unitAmount : ""}
+                    onChange={(e) => setUnitAmount(Math.trunc(e.target.valueAsNumber))}
+                  />
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="copago-date">Fecha de pago</Label>
-            <Input
-              id="copago-date"
-              type="date"
-              value={paidAt}
-              onChange={(e) => setPaidAt(e.target.value)}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="copago-date">Fecha de pago</Label>
+                <Input
+                  id="copago-date"
+                  type="date"
+                  value={paidAt}
+                  onChange={(e) => setPaidAt(e.target.value)}
+                />
+              </div>
 
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <span className="text-sm text-muted-foreground">Total a registrar</span>
-            <span className="text-lg font-semibold tabular-nums">
-              {formatARS(total)}
-            </span>
-          </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="text-sm">
+                  <div className="font-medium">Total a cobrar</div>
+                  <div className="text-xs text-muted-foreground">
+                    Queda debiendo {remainingAfter}{" "}
+                    {remainingAfter === 1 ? "copago" : "copagos"}
+                  </div>
+                </div>
+                <span className="text-lg font-semibold tabular-nums">
+                  {formatARS(total)}
+                </span>
+              </div>
+            </>
+          )}
 
           <DialogFooter>
             <Button
@@ -170,15 +186,17 @@ export function CopagoDialog({
               onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
-              Cancelar
+              {owed === 0 ? "Cerrar" : "Cancelar"}
             </Button>
-            <SubmitButton
-              loading={isPending}
-              loadingText="Registrando…"
-              disabled={!(quantity >= 1) || !(unitAmount >= 0)}
-            >
-              Registrar
-            </SubmitButton>
+            {owed > 0 && (
+              <SubmitButton
+                loading={isPending}
+                loadingText="Registrando…"
+                disabled={!(qty >= 1) || qty > owed || !(unit >= 0)}
+              >
+                Registrar
+              </SubmitButton>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

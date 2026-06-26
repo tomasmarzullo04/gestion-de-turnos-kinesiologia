@@ -58,42 +58,44 @@ export const paymentService = {
     `;
   },
 
-  /** Registra uno o varios copagos de un paciente para un período. */
+  /**
+   * Registra uno o varios copagos pagados por un paciente. El período (mes/año)
+   * que alimenta Finanzas se deriva de la fecha de pago; el copago en sí NO está
+   * atado a un mes: la deuda se calcula como asistencias PRESENT − copagos pagos.
+   */
   async registerCopagos(input: {
     userId: string;
     quantity: number;
     unitAmount: number;
-    periodMonth: number;
-    periodYear: number;
     paidAt: string;
     recordedById: string;
   }): Promise<void> {
     const total = input.quantity * input.unitAmount;
+    const [y, m] = input.paidAt.split("-").map(Number);
     await prisma.$executeRaw`
       INSERT INTO payments
         (user_id, type, amount, quantity, period_month, period_year, paid_at, recorded_by_id)
       VALUES
         (${input.userId}, 'COPAGO', ${total}, ${input.quantity},
-         ${input.periodMonth}, ${input.periodYear}, ${input.paidAt}::date, ${input.recordedById})
+         ${m}, ${y}, ${input.paidAt}::date, ${input.recordedById})
     `;
   },
 
-  /** Registra un cobro extra puntual. */
+  /** Registra un cobro extra puntual (alimenta Finanzas por la fecha de pago). */
   async registerExtra(input: {
     userId: string;
     amount: number;
     concept: string;
-    periodMonth: number;
-    periodYear: number;
     paidAt: string;
     recordedById: string;
   }): Promise<void> {
+    const [y, m] = input.paidAt.split("-").map(Number);
     await prisma.$executeRaw`
       INSERT INTO payments
         (user_id, type, amount, quantity, period_month, period_year, concept, paid_at, recorded_by_id)
       VALUES
         (${input.userId}, 'EXTRA', ${input.amount}, 1,
-         ${input.periodMonth}, ${input.periodYear}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById})
+         ${m}, ${y}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById})
     `;
   },
 

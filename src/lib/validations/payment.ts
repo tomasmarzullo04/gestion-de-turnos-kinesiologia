@@ -4,26 +4,21 @@ const dateField = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida");
 
-const monthField = z.number().int().min(1).max(12);
-const yearField = z.number().int().min(2000).max(2100);
-
 const amount = z
   .number({ invalid_type_error: "Ingresá un monto" })
   .int("El monto debe ser un número entero")
   .min(0, "El monto no puede ser negativo")
   .max(100_000_000, "Monto demasiado alto");
 
-/** Registrar uno o varios copagos de un paciente para un período (mes/año). */
+/** Registrar uno o varios copagos pagados por un paciente. */
 export const registerCopagoSchema = z.object({
   userId: z.string().min(1, "Paciente inválido"),
   quantity: z
     .number({ invalid_type_error: "Ingresá una cantidad" })
     .int("Cantidad inválida")
     .min(1, "Al menos un copago")
-    .max(60, "Cantidad demasiado alta"),
+    .max(200, "Cantidad demasiado alta"),
   unitAmount: amount,
-  periodMonth: monthField,
-  periodYear: yearField,
   paidAt: dateField,
 });
 
@@ -36,8 +31,6 @@ export const registerExtraSchema = z.object({
     .trim()
     .min(1, "Ingresá un concepto")
     .max(200, "Concepto demasiado largo"),
-  periodMonth: monthField,
-  periodYear: yearField,
   paidAt: dateField,
 });
 

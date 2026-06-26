@@ -1,5 +1,4 @@
 import { TIMEZONE } from "@/lib/constants";
-import { toLocalDateKey } from "@/lib/datetime";
 import { prisma } from "@/lib/db";
 
 export interface PatientRow {
@@ -9,9 +8,9 @@ export interface PatientRow {
   phone: string | null;
   upcoming: number;
   total: number;
-  // ── Copago del mes en curso ─────────────────────────────────────────────
-  copagoPaid: number; // copagos pagados este mes (suma de cantidades)
-  copagoExpected: number; // turnos del mes (cada uno debe un copago)
+  // ── Copago (balance histórico, no mensual) ──────────────────────────────
+  copagoAttended: number; // sesiones con asistencia PRESENT (cada una debe 1 copago)
+  copagoPaid: number; // copagos ya pagados (suma de cantidades)
   // ── Campos de cobertura y tratamiento ───────────────────────────────────
   tipoCoberturaString: string | null;
   obraSocialNombre: string | null;
@@ -45,16 +44,10 @@ export const patientService = {
       },
     });
 
-    // Mes en curso (zona del estudio) para el estado de copagos.
-    const todayKey = toLocalDateKey(new Date());
-    const [yStr, mStr] = todayKey.split("-");
-    const year = Number(yStr);
-    const month = Number(mStr);
-
     // Conteos por paciente (bookings.user_id = User.id, sin FK → agregamos aparte).
-    // `expected` = turnos CONFIRMED del mes en curso (cada uno debe un copago).
+    // `attended` = sesiones con asistencia PRESENT (cada una genera 1 copago).
     const counts = await prisma.$queryRaw<
-      { user_id: string; upcoming: bigint; total: bigint; expected: bigint }[]
+      { user_id: string; upcoming: bigint; total: bigint; attended: bigint }[]
     >`
       SELECT b.user_id,
              count(*) FILTER (
@@ -62,13 +55,10 @@ export const patientService = {
                  AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) >= now()
              ) AS upcoming,
              count(*) AS total,
-             count(*) FILTER (
-               WHERE b.status = 'CONFIRMED'
-                 AND extract(year FROM s.date) = ${year}
-                 AND extract(month FROM s.date) = ${month}
-             ) AS expected
+             count(*) FILTER (WHERE a.status = 'PRESENT') AS attended
       FROM bookings b
       JOIN slots s ON s.id = b.slot_id
+      LEFT JOIN attendances a ON a.booking_id = b.id
       GROUP BY b.user_id
     `;
     const map = new Map(
@@ -77,12 +67,12 @@ export const patientService = {
         {
           upcoming: Number(c.upcoming),
           total: Number(c.total),
-          expected: Number(c.expected),
+          attended: Number(c.attended),
         },
       ]),
     );
 
-    // Copagos pagados en el mes por paciente (suma de cantidades, sin anulados).
+    // Copagos pagados por paciente (histórico, suma de cantidades, sin anulados).
     // Si la tabla `payments` aún no existe (migración pendiente), degradamos a
     // "0 pagado" sin romper la página de Pacientes.
     let paidMap = new Map<string, number>();
@@ -91,7 +81,6 @@ export const patientService = {
         SELECT user_id, coalesce(sum(quantity), 0) AS paid
         FROM payments
         WHERE type = 'COPAGO' AND voided_at IS NULL
-          AND period_year = ${year} AND period_month = ${month}
         GROUP BY user_id
       `;
       paidMap = new Map(paidRows.map((r) => [r.user_id, Number(r.paid)]));
@@ -106,8 +95,8 @@ export const patientService = {
       phone: p.phone,
       upcoming: map.get(p.id)?.upcoming ?? 0,
       total: map.get(p.id)?.total ?? 0,
+      copagoAttended: map.get(p.id)?.attended ?? 0,
       copagoPaid: paidMap.get(p.id) ?? 0,
-      copagoExpected: map.get(p.id)?.expected ?? 0,
       tipoCoberturaString: p.tipoCoberturaString,
       obraSocialNombre: p.obraSocialNombre,
       requiereCopago: p.requiereCopago,

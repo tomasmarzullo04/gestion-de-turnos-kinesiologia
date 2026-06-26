@@ -16,19 +16,16 @@ export default async function PatientsPage() {
   ]);
 
   const todayKey = toLocalDateKey(new Date());
-  const [yStr, mStr] = todayKey.split("-");
-  const period = { month: Number(mStr), year: Number(yStr) };
 
   return (
     <div>
       <PageHeader
         title="Pacientes"
-        description="Pacientes registrados, su historial de turnos y el copago del mes."
+        description="Pacientes registrados, su historial de turnos y la deuda de copagos."
       />
       <PatientsTable
         patients={patients}
         copagoAmount={copagoAmount}
-        period={period}
         todayKey={todayKey}
       />
     </div>

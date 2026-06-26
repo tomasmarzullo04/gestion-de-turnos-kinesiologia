@@ -215,7 +215,6 @@ export function FinanzasView({
         open={extraOpen}
         onOpenChange={setExtraOpen}
         patients={patients}
-        period={{ month, year }}
         todayKey={todayKey}
       />
       <CopagoAmountDialog
@@ -246,13 +245,11 @@ function ExtraDialog({
   open,
   onOpenChange,
   patients,
-  period,
   todayKey,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   patients: { id: string; name: string }[];
-  period: { month: number; year: number };
   todayKey: string;
 }) {
   const [isPending, startTransition] = React.useTransition();
@@ -277,8 +274,6 @@ function ExtraDialog({
         userId,
         concept,
         amount,
-        periodMonth: period.month,
-        periodYear: period.year,
         paidAt,
       });
       if (result.success) {
@@ -296,7 +291,7 @@ function ExtraDialog({
         <DialogHeader>
           <DialogTitle>Registrar cobro extra</DialogTitle>
           <DialogDescription>
-            {monthName(period.month)} {period.year}
+            Se imputa al mes de la fecha de pago.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

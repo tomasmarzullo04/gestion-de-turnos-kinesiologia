@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { getPatientBookingsAction } from "@/app/(admin)/actions";
 import { BookingCard } from "@/components/features/booking-card";
 import { CopagoDialog } from "@/components/features/copago-dialog";
+import { formatARS } from "@/lib/money";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,8 +42,8 @@ interface PatientRow {
   phone: string | null;
   upcoming: number;
   total: number;
+  copagoAttended: number;
   copagoPaid: number;
-  copagoExpected: number;
   tipoCoberturaString: string | null;
   obraSocialNombre: string | null;
   requiereCopago: boolean;
@@ -56,12 +57,10 @@ interface PatientRow {
 export function PatientsTable({
   patients,
   copagoAmount,
-  period,
   todayKey,
 }: {
   patients: PatientRow[];
   copagoAmount: number;
-  period: { month: number; year: number };
   todayKey: string;
 }) {
   const [selected, setSelected] = React.useState<PatientRow | null>(null);
@@ -129,9 +128,9 @@ export function PatientsTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Paciente</TableHead>
+              <TableHead className="w-[1%] whitespace-nowrap">Paciente</TableHead>
               <TableHead>Contacto</TableHead>
-              <TableHead>Cobertura</TableHead>
+              <TableHead className="w-full">Cobertura</TableHead>
               <TableHead>Próximos</TableHead>
               <TableHead>Total</TableHead>
               <TableHead>Copago</TableHead>
@@ -141,7 +140,7 @@ export function PatientsTable({
           <TableBody>
             {patients.map((p) => (
               <TableRow key={p.id}>
-                <TableCell className="font-medium">
+                <TableCell className="whitespace-nowrap font-medium">
                   <div className="flex items-center gap-2">
                     {p.name}
                     {p.esPrimeraVez && (
@@ -172,31 +171,37 @@ export function PatientsTable({
                 </TableCell>
                 <TableCell className="tabular-nums">{p.total}</TableCell>
                 <TableCell>
-                  <button
-                    type="button"
-                    onClick={() => setCopagoFor(p)}
-                    className="group inline-flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    title="Registrar copago"
-                  >
-                    {p.copagoExpected === 0 ? (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    ) : p.copagoPaid >= p.copagoExpected ? (
-                      <Badge
-                        variant="secondary"
-                        className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                  {(() => {
+                    const owed = Math.max(0, p.copagoAttended - p.copagoPaid);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setCopagoFor(p)}
+                        className="group inline-flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        title="Registrar copago"
                       >
-                        Al día
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="secondary"
-                        className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 tabular-nums"
-                      >
-                        {p.copagoPaid} / {p.copagoExpected} pagos
-                      </Badge>
-                    )}
-                    <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                  </button>
+                        {owed === 0 ? (
+                          <Badge
+                            variant="secondary"
+                            className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                          >
+                            Al día
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="secondary"
+                            className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 tabular-nums"
+                          >
+                            Debe {formatARS(owed * copagoAmount)}
+                            <span className="ml-1 font-normal opacity-80">
+                              ({owed})
+                            </span>
+                          </Badge>
+                        )}
+                        <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                      </button>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell>
                   <Button
@@ -315,7 +320,6 @@ export function PatientsTable({
         onOpenChange={(open) => !open && setCopagoFor(null)}
         patient={copagoFor}
         copagoAmount={copagoAmount}
-        period={period}
         todayKey={todayKey}
       />
     </>
