@@ -9,6 +9,7 @@ import {
   Menu,
   Stethoscope,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -39,6 +40,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Asistencias", href: "/admin/asistencias", icon: ClipboardCheck },
   { label: "Plantillas", href: "/admin/plantillas", icon: CalendarClock },
   { label: "Pacientes", href: "/admin/pacientes", icon: Users },
+  { label: "Finanzas", href: "/admin/finanzas", icon: Wallet },
   { label: "Profesionales", href: "/admin/profesionales", icon: Stethoscope },
 ];
 

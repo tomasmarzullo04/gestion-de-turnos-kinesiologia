@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { CalendarClock, Loader2, Users } from "lucide-react";
+import { CalendarClock, Loader2, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { getPatientBookingsAction } from "@/app/(admin)/actions";
 import { BookingCard } from "@/components/features/booking-card";
+import { CopagoDialog } from "@/components/features/copago-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ interface PatientRow {
   phone: string | null;
   upcoming: number;
   total: number;
+  copagoPaid: number;
+  copagoExpected: number;
   tipoCoberturaString: string | null;
   obraSocialNombre: string | null;
   requiereCopago: boolean;
@@ -50,8 +53,19 @@ interface PatientRow {
   tratamientoFin: string | null;
 }
 
-export function PatientsTable({ patients }: { patients: PatientRow[] }) {
+export function PatientsTable({
+  patients,
+  copagoAmount,
+  period,
+  todayKey,
+}: {
+  patients: PatientRow[];
+  copagoAmount: number;
+  period: { month: number; year: number };
+  todayKey: string;
+}) {
   const [selected, setSelected] = React.useState<PatientRow | null>(null);
+  const [copagoFor, setCopagoFor] = React.useState<PatientRow | null>(null);
   const [bookings, setBookings] = React.useState<MyBooking[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
@@ -118,9 +132,9 @@ export function PatientsTable({ patients }: { patients: PatientRow[] }) {
               <TableHead>Paciente</TableHead>
               <TableHead>Contacto</TableHead>
               <TableHead>Cobertura</TableHead>
-              <TableHead>Sesiones</TableHead>
               <TableHead>Próximos</TableHead>
               <TableHead>Total</TableHead>
+              <TableHead>Copago</TableHead>
               <TableHead className="w-[1%]">Turnos</TableHead>
             </TableRow>
           </TableHeader>
@@ -150,15 +164,6 @@ export function PatientsTable({ patients }: { patients: PatientRow[] }) {
                   </div>
                 </TableCell>
                 <TableCell>
-                  {p.sesionesTotales > 0 ? (
-                    <span className="text-sm font-medium">
-                      {p.numeroSesionActual} / {p.sesionesTotales}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
                   {p.upcoming > 0 ? (
                     <Badge variant="default">{p.upcoming}</Badge>
                   ) : (
@@ -166,6 +171,33 @@ export function PatientsTable({ patients }: { patients: PatientRow[] }) {
                   )}
                 </TableCell>
                 <TableCell className="tabular-nums">{p.total}</TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    onClick={() => setCopagoFor(p)}
+                    className="group inline-flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    title="Registrar copago"
+                  >
+                    {p.copagoExpected === 0 ? (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    ) : p.copagoPaid >= p.copagoExpected ? (
+                      <Badge
+                        variant="secondary"
+                        className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                      >
+                        Al día
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="secondary"
+                        className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 tabular-nums"
+                      >
+                        {p.copagoPaid} / {p.copagoExpected} pagos
+                      </Badge>
+                    )}
+                    <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  </button>
+                </TableCell>
                 <TableCell>
                   <Button
                     variant="outline"
@@ -277,6 +309,15 @@ export function PatientsTable({ patients }: { patients: PatientRow[] }) {
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      <CopagoDialog
+        open={Boolean(copagoFor)}
+        onOpenChange={(open) => !open && setCopagoFor(null)}
+        patient={copagoFor}
+        copagoAmount={copagoAmount}
+        period={period}
+        todayKey={todayKey}
+      />
     </>
   );
 }

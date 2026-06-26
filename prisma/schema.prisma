@@ -153,6 +153,40 @@ model Booking {
   @@map("bookings")
 }
 
+/// Pago de un paciente: copago (por turno/mes) o cobro extra puntual.
+/// user_id = User.id del paciente; recorded_by_id = User.id del profesional.
+/// Sin FK a nivel de base (consistente con bookings/attendances).
+model Payment {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id")
+  type         String    // "COPAGO" | "EXTRA"
+  amount       Int       // total en $ (pesos)
+  quantity     Int       @default(1) // copagos que cubre (COPAGO); 1 para EXTRA
+  periodMonth  Int       @map("period_month") // 1..12
+  periodYear   Int       @map("period_year")
+  concept      String?
+  paidAt       DateTime  @default(now()) @map("paid_at") @db.Timestamptz(6)
+  recordedById String    @map("recorded_by_id")
+  recordedAt   DateTime  @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  voidedAt     DateTime? @map("voided_at") @db.Timestamptz(6)
+  voidedById   String?   @map("voided_by_id")
+  voidReason   String?   @map("void_reason")
+
+  @@index([userId])
+  @@index([periodYear, periodMonth])
+  @@index([type])
+  @@map("payments")
+}
+
+/// Configuración de facturación (una sola fila, id = 1). Monto del copago.
+model BillingSetting {
+  id           Int      @id @default(1)
+  copagoAmount Int      @default(4000) @map("copago_amount")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("billing_settings")
+}
+
 /// Asistencia a una reserva. Un registro por reserva.
 model Attendance {
   bookingId String   @id @map("booking_id") @db.Uuid

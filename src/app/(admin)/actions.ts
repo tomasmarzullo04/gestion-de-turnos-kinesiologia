@@ -12,6 +12,13 @@ import { markAttendanceSchema } from "@/lib/validations/attendance";
 import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
 import { patientSchema } from "@/lib/validations/patient";
+import {
+  registerCopagoSchema,
+  registerExtraSchema,
+  updateCopagoAmountSchema,
+  voidPaymentSchema,
+} from "@/lib/validations/payment";
+import { paymentService } from "@/server/services/payment.service";
 import { attendanceService } from "@/server/services/attendance.service";
 import { bookingService, type MyBooking } from "@/server/services/booking.service";
 import { generationService } from "@/server/services/generation.service";
@@ -224,6 +231,72 @@ export async function markAttendanceAction(
     const { bookingId, status } = markAttendanceSchema.parse(input);
     await attendanceService.mark(bookingId, status, professional.id);
     revalidatePath("/admin/asistencias");
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+// ── Pagos (copagos + extras) — rol profesional ───────────────────────────────
+function revalidatePayments(): void {
+  revalidatePath("/admin/pacientes");
+  revalidatePath("/admin/finanzas");
+}
+
+export async function registerCopagoAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const data = registerCopagoSchema.parse(input);
+    await paymentService.registerCopagos({ ...data, recordedById: pro.id });
+    revalidatePayments();
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function registerExtraPaymentAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const data = registerExtraSchema.parse(input);
+    await paymentService.registerExtra({ ...data, recordedById: pro.id });
+    revalidatePayments();
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function voidPaymentAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const { paymentId, reason } = voidPaymentSchema.parse(input);
+    await paymentService.voidPayment({
+      paymentId,
+      voidedById: pro.id,
+      reason: reason ?? null,
+    });
+    revalidatePayments();
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function updateCopagoAmountAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    const { amount } = updateCopagoAmountSchema.parse(input);
+    await paymentService.setCopagoAmount(amount);
+    revalidatePayments();
     return ok(undefined);
   } catch (error) {
     return fromError(error);
