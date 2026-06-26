@@ -114,28 +114,21 @@ export const bookingService = {
     }
 
     // ── Regla acotada: PRIMER turno de REHAB ──────────────────────────────
-    // Solo aplica al servicio REHAB y solo si el paciente no tiene NINGUNA
-    // reserva de REHAB en estado CONFIRMED en su historia (las canceladas no
-    // cuentan; por eso filtramos por status). Validamos contra el servicio REAL
-    // de la franja —no un parámetro que el cliente podría falsear—: el servidor
-    // es la verdad y la UI solo oculta lo que igualmente se rechazaría acá.
+    // Solo aplica al servicio REHAB. La restricción de ventana se mantiene
+    // hasta que el paciente ASISTIÓ a una sesión de REHAB (asistencia PRESENT);
+    // ver `puedeReservarRehabLibre`. Mientras no haya un PRESENT, TODA reserva
+    // REHAB nueva debe caer en ventana, sin importar cuántas futuras ya tenga.
+    // Validamos contra el servicio REAL de la franja (no un parámetro que el
+    // cliente podría falsear): el servidor es la verdad; la UI solo refleja.
     //
-    // Concurrencia: "es primer REHAB" es el estado RESTRICTIVO. Dos primeros
-    // turnos casi simultáneos leen ambos 0 reservas → ambos quedan limitados a
-    // la ventana, así que ninguno fuera de ventana puede colarse. Para saltear
-    // la restricción haría falta una reserva CONFIRMED previa ya commiteada, lo
-    // que no puede ocurrir con operaciones aún no confirmadas.
+    // Concurrencia: el estado "libre" solo se activa al marcar asistencia
+    // PRESENT (acción del profesional), nunca desde el flujo de reserva. Por
+    // eso dos reservas REHAB casi simultáneas leen ambas "no libre" → ambas
+    // quedan limitadas a la ventana y ninguna fuera de ventana puede colarse.
     if (slot.service_slug === REHAB_SLUG && slot.service_id) {
-      const prior = await prisma.$queryRaw<{ n: number }[]>`
-        SELECT count(*)::int AS n
-        FROM bookings
-        WHERE user_id = ${userId}::text
-          AND service_id = ${slot.service_id}::uuid
-          AND status = 'CONFIRMED'
-      `;
-      const esPrimerRehab = (prior[0]?.n ?? 0) === 0;
+      const libre = await this.puedeReservarRehabLibre(userId);
       if (
-        esPrimerRehab &&
+        !libre &&
         !isRehabFirstTimeSlotAllowed(slot.day_of_week, slot.start_hour)
       ) {
         throw new BusinessError(REHAB_FIRST_TIME_MESSAGE);
@@ -291,19 +284,30 @@ export const bookingService = {
   },
 
   /**
-   * ¿El paciente ya tiene al menos una reserva de REHAB en estado CONFIRMED?
-   * Se usa para saber si la restricción de horarios del PRIMER turno de REHAB
-   * aplica (no aplica si ya tuvo uno). Las canceladas no cuentan.
+   * ¿El paciente puede reservar REHAB SIN restricción de horarios?
+   *
+   * Criterio (Opción B, confirmado por el negocio): la restricción del primer
+   * turno se levanta SOLO cuando el paciente YA ASISTIÓ a una sesión de REHAB,
+   * es decir, cuando existe una reserva REHAB suya con asistencia PRESENT.
+   *
+   * Tener reservas REHAB futuras NO alcanza: una reserva no cumplida no
+   * significa que ya hizo su primera sesión. Hasta que haya un PRESENT, TODA
+   * reserva REHAB nueva debe caer en ventana permitida.
+   *
+   * Es la ÚNICA fuente de verdad: la usan tanto la UI como el servidor.
    */
-  async hasConfirmedRehab(userId: string): Promise<boolean> {
-    const rows = await prisma.$queryRaw<{ n: number }[]>`
-      SELECT count(*)::int AS n
-      FROM bookings
-      WHERE user_id = ${userId}::text
-        AND service_id = (SELECT id FROM services WHERE slug = ${REHAB_SLUG})
-        AND status = 'CONFIRMED'
+  async puedeReservarRehabLibre(userId: string): Promise<boolean> {
+    const rows = await prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM bookings b
+        JOIN attendances a ON a.booking_id = b.id
+        WHERE b.user_id = ${userId}::text
+          AND b.service_id = (SELECT id FROM services WHERE slug = ${REHAB_SLUG})
+          AND a.status = 'PRESENT'
+      ) AS ok
     `;
-    return (rows[0]?.n ?? 0) > 0;
+    return rows[0]?.ok ?? false;
   },
 };
 

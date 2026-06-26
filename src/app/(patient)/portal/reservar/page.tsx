@@ -13,15 +13,15 @@ export const dynamic = "force-dynamic";
 export default async function BookingPage() {
   const user = await requirePatient();
 
-  const [days, services, hasRehab] = await Promise.all([
+  const [days, services, rehabLibre] = await Promise.all([
     slotService.getUpcomingDays(),
     serviceService.listActive(),
-    bookingService.hasConfirmedRehab(user.id),
+    bookingService.puedeReservarRehabLibre(user.id),
   ]);
 
-  // Restricción de horarios SOLO para el primer turno de REHAB (si nunca tuvo
-  // uno confirmado). No afecta a ningún otro servicio.
-  const esPrimerRehab = !hasRehab;
+  // La restricción de horarios de REHAB se mantiene hasta que el paciente
+  // asistió a una sesión (asistencia PRESENT). No afecta a otros servicios.
+  const esPrimerRehab = !rehabLibre;
 
   // Ya no obtenemos initialSlots por defecto porque dependemos del servicio
   // que seleccione el paciente en el paso 1.
