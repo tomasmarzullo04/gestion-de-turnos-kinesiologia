@@ -32,6 +32,11 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult<{ isF
       );
     }
 
+    // Cuenta archivada (baja lógica): no puede reservar.
+    if (await patientService.isArchived(user.id)) {
+      return fail("Tu cuenta está inactiva. Contactá a recepción.");
+    }
+
     // Obtener estado de primera vez del paciente
     const profile = await patientService.getPatientProfile(user.id);
     const esPrimeraVez = profile?.esPrimeraVez ?? false;

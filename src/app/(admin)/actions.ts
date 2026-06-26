@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger";
 import { markAttendanceSchema } from "@/lib/validations/attendance";
 import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
-import { patientSchema } from "@/lib/validations/patient";
+import { editPatientSchema } from "@/lib/validations/patient";
 import {
   registerCopagoSchema,
   registerExtraSchema,
@@ -212,9 +212,56 @@ export async function updatePatientAction(
   input: unknown,
 ): Promise<ActionResult> {
   try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const data = editPatientSchema.parse(input);
+    await patientService.editPatient(userId, data, pro.id);
+    revalidatePath("/admin/pacientes");
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Devuelve el impacto de eliminar un paciente (para el modal de confirmación). */
+export async function getPatientDeletionImpactAction(
+  userId: string,
+): Promise<ActionResult<{
+  bookings: number;
+  futureBookings: number;
+  attendances: number;
+  payments: number;
+  hasHistory: boolean;
+}>> {
+  try {
     await assertRole(ROLES.ADMIN);
-    const data = patientSchema.parse(input);
-    await patientService.updatePatientInfo(userId, data);
+    const impact = await patientService.getDeletionImpact(userId);
+    return ok(impact);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Elimina (baja lógica si hay historial; física si no) un paciente. */
+export async function deletePatientAction(
+  userId: string,
+): Promise<ActionResult<{ mode: "archived" | "deleted"; cancelledFuture: number }>> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const result = await patientService.deletePatient(userId, pro.id);
+    revalidatePath("/admin/pacientes");
+    return ok(result);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Reactiva (desarchiva) un paciente. */
+export async function reactivatePatientAction(
+  userId: string,
+): Promise<ActionResult> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    await patientService.reactivatePatient(userId);
     revalidatePath("/admin/pacientes");
     return ok(undefined);
   } catch (error) {

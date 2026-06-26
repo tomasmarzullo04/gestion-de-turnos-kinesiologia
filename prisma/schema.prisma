@@ -67,7 +67,13 @@ model User {
   tratamientoInicio     DateTime? @map("tratamiento_inicio") @db.Timestamptz(6)
   tratamientoFin        DateTime? @map("tratamiento_fin") @db.Timestamptz(6)
 
+  // ── Baja lógica + auditoría ─────────────────────────────────────────────
+  archivedAt            DateTime? @map("archived_at") @db.Timestamptz(6)
+  archivedBy            String?   @map("archived_by")
+  updatedBy             String?   @map("updated_by")
+
   @@index([role])
+  @@index([archivedAt])
 }
 
 /// Profesional del estudio.

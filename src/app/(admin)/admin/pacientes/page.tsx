@@ -9,11 +9,22 @@ import { paymentService } from "@/server/services/payment.service";
 export const metadata: Metadata = { title: "Pacientes" };
 export const dynamic = "force-dynamic";
 
-export default async function PatientsPage() {
-  const [patients, copagoAmount] = await Promise.all([
-    patientService.listWithStats(),
+export default async function PatientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view: viewParam } = await searchParams;
+  const view = viewParam === "archived" ? "archived" : "active";
+
+  const [list, copagoAmount] = await Promise.all([
+    patientService.listWithStats(view === "archived"),
     paymentService.getCopagoAmount(),
   ]);
+
+  // En "archivados" mostramos solo los archivados; en "activos", listWithStats
+  // ya excluye los archivados.
+  const patients = view === "archived" ? list.filter((p) => p.archived) : list;
 
   const todayKey = toLocalDateKey(new Date());
 
@@ -27,6 +38,7 @@ export default async function PatientsPage() {
         patients={patients}
         copagoAmount={copagoAmount}
         todayKey={todayKey}
+        view={view}
       />
     </div>
   );
