@@ -26,7 +26,9 @@ export default async function BookingPage() {
 
   // Fecha de hoy y último día del mes (default para el "turno fijo").
   const todayKey = toLocalDateKey(new Date());
-  const [y, m] = todayKey.split("-").map(Number);
+  const [yStr, mStr] = todayKey.split("-");
+  const y = Number(yStr);
+  const m = Number(mStr);
   const lastDay = new Date(y, m, 0).getDate();
   const defaultToDate = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
