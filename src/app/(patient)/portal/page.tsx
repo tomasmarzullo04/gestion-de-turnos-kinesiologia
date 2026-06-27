@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
+import { LocationMapCard } from "@/components/features/location-map-card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -165,10 +166,10 @@ export default async function PortalHomePage() {
           </section>
         </div>
 
-        {/* Columna Derecha (Información útil) */}
-        <div className="md:col-span-3 lg:col-span-2">
+        {/* Columna Derecha (Información útil + Cómo llegar) */}
+        <div className="flex flex-col gap-6 md:col-span-3 lg:col-span-2">
           {/* 5. Información útil */}
-          <Card className="h-full bg-accent/30 border-accent">
+          <Card className="bg-accent/30 border-accent">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Lightbulb className="h-4 w-4 text-primary" />
@@ -192,6 +193,9 @@ export default async function PortalHomePage() {
               </ul>
             </CardContent>
           </Card>
+
+          {/* 6. Cómo llegar (mapa del consultorio) */}
+          <LocationMapCard />
         </div>
       </div>
 
