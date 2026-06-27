@@ -6,7 +6,6 @@ import {
   CalendarPlus,
   ClipboardCheck,
   LayoutDashboard,
-  Menu,
   Stethoscope,
   Users,
   Wallet,
@@ -16,15 +15,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { BrandMark } from "@/components/shared/brand-mark";
+import { MobileNav } from "@/components/shared/mobile-nav";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { UserMenu } from "@/components/shared/user-menu";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ROLES, type Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useRealtimeBookings } from "@/lib/hooks/use-realtime-bookings";
@@ -116,24 +109,12 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
         {/* Topbar */}
         <header className="sticky top-0 z-30 flex h-32 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur lg:px-6">
           <div className="flex items-center gap-2">
-            {/* Mobile nav */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild className="lg:hidden">
-                <Button variant="ghost" size="icon" aria-label="Abrir menú">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                {nav.map((item) => (
-                  <DropdownMenuItem key={item.href} asChild>
-                    <Link href={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      {item.label}
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Mobile nav (drawer azul marino) */}
+            <MobileNav
+              nav={nav}
+              homeHref={homeHref}
+              footer={role === ROLES.ADMIN ? "Panel del profesional" : "Portal del socio"}
+            />
             <Link
               href={homeHref}
               className="flex items-center font-display font-semibold tracking-tight lg:hidden"

@@ -81,6 +81,11 @@ export default async function PortalHomePage() {
         />
       </section>
 
+      {/* Ubicación del consultorio (compacta, visible sin scroll) */}
+      <section>
+        <LocationMapCard />
+      </section>
+
       <div className="grid gap-6 md:grid-cols-7">
         {/* Columna Izquierda (Próximo Turno + Acciones Rápidas) */}
         <div className="flex flex-col gap-6 md:col-span-4 lg:col-span-5">
@@ -166,10 +171,10 @@ export default async function PortalHomePage() {
           </section>
         </div>
 
-        {/* Columna Derecha (Información útil + Cómo llegar) */}
-        <div className="flex flex-col gap-6 md:col-span-3 lg:col-span-2">
+        {/* Columna Derecha (Información útil) */}
+        <div className="md:col-span-3 lg:col-span-2">
           {/* 5. Información útil */}
-          <Card className="bg-accent/30 border-accent">
+          <Card className="h-full bg-accent/30 border-accent">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Lightbulb className="h-4 w-4 text-primary" />
@@ -193,9 +198,6 @@ export default async function PortalHomePage() {
               </ul>
             </CardContent>
           </Card>
-
-          {/* 6. Cómo llegar (mapa del consultorio) */}
-          <LocationMapCard />
         </div>
       </div>
 
