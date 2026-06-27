@@ -308,7 +308,12 @@ function NewPatientDialog({
         requiereCopago,
       });
       if (result.success) {
-        setCreated(result.data);
+        setCreated({
+          id: result.data.userId,
+          name: result.data.name,
+          email: result.data.email,
+          tempPassword: result.data.tempPassword,
+        });
         onCreated({ id: result.data.userId, name: result.data.name });
       } else {
         toast.error(result.error);
