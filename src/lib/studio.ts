@@ -3,12 +3,12 @@
  * actualiza en todos lados (mapa de Inicio, links a Google Maps, etc.).
  *
  * Para mayor precisión en Google Maps podés completar la dirección con ciudad y
- * país (p. ej. "Dean Dunes 1694, Ciudad, País"). Si tenés las coordenadas
+ * país (p. ej. "Dean Funes 1694, Ciudad, País"). Si tenés las coordenadas
  * exactas, cargalas en `coords` ("lat,lng") y se usan con prioridad.
  */
 export const STUDIO_LOCATION = {
   name: "Apex",
-  address: "Dean Dunes 1694",
+  address: "Dean Funes 1694",
   /** Opcional: "lat,lng". Si está, se prioriza sobre la dirección. */
   coords: "" as string,
 };
