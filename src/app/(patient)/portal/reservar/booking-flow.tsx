@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 
 import { bookSlotAction } from "@/app/(patient)/actions";
+import { ServiceAvailabilityDialog } from "@/app/(patient)/portal/reservar/service-availability-dialog";
 import { SlotGrid } from "@/components/features/slot-grid";
 import {
   ServiceSelector,
@@ -81,6 +82,7 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
   const [loadingSlots, setLoadingSlots] = React.useState(false);
   const [selectedSlot, setSelectedSlot] = React.useState<SlotView | null>(null);
   const [notes, setNotes] = React.useState("");
+  const [availabilityOpen, setAvailabilityOpen] = React.useState(false);
 
   // Caché en memoria de las franjas por día ya consultado.
   const cacheRef = React.useRef<Map<string, SlotView[]>>(new Map());
@@ -140,6 +142,20 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
     }
   }, []);
 
+  // Selección rápida desde el modal de disponibilidad: siembra día + franja en
+  // el flujo existente (sin re-fetch) y cierra el modal.
+  const handlePickFromModal = React.useCallback(
+    (date: string, daySlots: SlotView[], slot: SlotView) => {
+      cacheRef.current.set(date, daySlots);
+      selectedDateRef.current = date;
+      setSelectedDate(date);
+      setSlots(daySlots);
+      setSelectedSlot(slot);
+      setAvailabilityOpen(false);
+    },
+    [],
+  );
+
   const handleServiceSelect = React.useCallback((service: ServiceOption) => {
     setSelectedService(service);
     setSelectedDate(null);
@@ -147,6 +163,7 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
     setSelectedSlot(null);
     setSlots([]);
     cacheRef.current.clear();
+    setAvailabilityOpen(true);
     // Los días se recargarán vía fetchDays o podemos usar los initialDays
     // filtrados por servicio. Usamos la API de días si existe, o filtramos
     // del listado existente.
@@ -434,6 +451,14 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
           </div>
         </CardContent>
       </Card>
+
+      <ServiceAvailabilityDialog
+        open={availabilityOpen}
+        onOpenChange={setAvailabilityOpen}
+        service={selectedService}
+        restrictRehab={restrictRehab}
+        onPick={handlePickFromModal}
+      />
     </div>
   );
 }
