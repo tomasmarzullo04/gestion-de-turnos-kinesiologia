@@ -4,6 +4,7 @@ import { CalendarPlus, CalendarRange } from "lucide-react";
 
 import { BookingFlow } from "@/app/(patient)/portal/reservar/booking-flow";
 import { SeriesBuilder } from "@/app/(patient)/portal/reservar/series-builder";
+import { type ScheduleEntry } from "@/app/(patient)/portal/reservar/service-schedule-hint";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type ServiceOption } from "@/components/features/service-selector";
 import { type DayAvailability } from "@/server/services/slot.service";
@@ -14,9 +15,10 @@ interface Props {
   esPrimerRehab: boolean;
   todayKey: string;
   defaultToDate: string;
+  schedules: Record<string, ScheduleEntry[]>;
 }
 
-export function ReservarTabs({ services, days, esPrimerRehab, todayKey, defaultToDate }: Props) {
+export function ReservarTabs({ services, days, esPrimerRehab, todayKey, defaultToDate, schedules }: Props) {
   return (
     <Tabs defaultValue="single" className="space-y-4">
       <TabsList>
@@ -37,6 +39,7 @@ export function ReservarTabs({ services, days, esPrimerRehab, todayKey, defaultT
           initialDate={null}
           initialSlots={[]}
           esPrimerRehab={esPrimerRehab}
+          schedules={schedules}
         />
       </TabsContent>
 

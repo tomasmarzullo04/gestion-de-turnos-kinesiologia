@@ -159,41 +159,6 @@ export const slotService = {
     return rows.map(toSlotView);
   },
 
-  /**
-   * Disponibilidad próxima de un servicio, agrupada por fecha. Misma fuente de
-   * verdad que la reserva (slots), en UNA sola query agregada (sin loops). Solo
-   * franjas futuras del servicio dentro de la ventana de generación.
-   */
-  async getServiceAvailability(
-    serviceId: string,
-  ): Promise<{ date: string; slots: SlotView[] }[]> {
-    const rows = await prisma.$queryRaw<(RawSlot & { date: string })[]>`
-      SELECT s.id,
-             s.date::text AS date,
-             to_char(s.start_time, 'HH24:MI') AS start_time,
-             to_char(s.end_time, 'HH24:MI') AS end_time,
-             s.capacity, s.booked_count, s.is_blocked,
-             false AS is_past,
-             s.service_id,
-             sv.name AS service_name,
-             sv.color AS service_color
-      FROM slots s
-      LEFT JOIN services sv ON sv.id = s.service_id
-      WHERE s.service_id = ${serviceId}::uuid
-        AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
-        AND s.date <= current_date + (${BOOKING_CONFIG.generationDays} || ' days')::interval
-      ORDER BY s.date, s.start_time
-    `;
-
-    const map = new Map<string, SlotView[]>();
-    for (const r of rows) {
-      const arr = map.get(r.date) ?? [];
-      arr.push(toSlotView(r));
-      map.set(r.date, arr);
-    }
-    return [...map.entries()].map(([date, slots]) => ({ date, slots }));
-  },
-
   async setBlocked(slotId: string, blocked: boolean): Promise<void> {
     await prisma.slot.update({
       where: { id: slotId },

@@ -59,6 +59,49 @@ export const slotTemplateService = {
     }));
   },
 
+  /**
+   * Patrón semanal ACTIVO por servicio (días + rangos + cupos), tomado de las
+   * plantillas (única fuente de verdad). Para el cartel informativo del socio.
+   */
+  async activeScheduleByService(): Promise<
+    Record<
+      string,
+      { dayOfWeek: number; startTime: string; endTime: string; capacity: number }[]
+    >
+  > {
+    const rows = await prisma.$queryRaw<
+      {
+        service_id: string;
+        day_of_week: number;
+        start_time: string;
+        end_time: string;
+        capacity: number;
+      }[]
+    >`
+      SELECT service_id::text AS service_id,
+             day_of_week,
+             to_char(start_time, 'HH24:MI') AS start_time,
+             to_char(end_time, 'HH24:MI') AS end_time,
+             capacity
+      FROM slot_templates
+      WHERE active = true AND service_id IS NOT NULL
+      ORDER BY day_of_week, start_time
+    `;
+    const out: Record<
+      string,
+      { dayOfWeek: number; startTime: string; endTime: string; capacity: number }[]
+    > = {};
+    for (const r of rows) {
+      (out[r.service_id] ??= []).push({
+        dayOfWeek: r.day_of_week,
+        startTime: r.start_time,
+        endTime: r.end_time,
+        capacity: r.capacity,
+      });
+    }
+    return out;
+  },
+
   async create(input: SlotTemplateInput): Promise<void> {
     const pid = input.professionalId ?? null;
     const sid = input.serviceId ?? null;

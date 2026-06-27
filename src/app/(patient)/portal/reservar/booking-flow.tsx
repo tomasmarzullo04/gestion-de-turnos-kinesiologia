@@ -15,7 +15,6 @@ import {
 import { toast } from "sonner";
 
 import { bookSlotAction } from "@/app/(patient)/actions";
-import { ServiceAvailabilityDialog } from "@/app/(patient)/portal/reservar/service-availability-dialog";
 import { SlotGrid } from "@/components/features/slot-grid";
 import {
   ServiceSelector,
@@ -35,6 +34,10 @@ import {
   isRehabFirstTimeSlotAllowed,
 } from "@/lib/rehab-first-time";
 import { cn } from "@/lib/utils";
+import {
+  ServiceScheduleHint,
+  type ScheduleEntry,
+} from "@/app/(patient)/portal/reservar/service-schedule-hint";
 import { type DayAvailability, type SlotView } from "@/server/services/slot.service";
 
 interface Props {
@@ -44,6 +47,8 @@ interface Props {
   initialSlots: SlotView[];
   /** El paciente nunca tuvo un turno de REHAB confirmado → aplica la ventana. */
   esPrimerRehab: boolean;
+  /** Patrón semanal por servicio (id → días/horarios/cupos) para el cartel. */
+  schedules: Record<string, ScheduleEntry[]>;
 }
 
 const StepHeader = React.memo(function StepHeader({
@@ -70,7 +75,7 @@ const StepHeader = React.memo(function StepHeader({
   );
 });
 
-export function BookingFlow({ services, days: initialDays, initialDate, initialSlots, esPrimerRehab }: Props) {
+export function BookingFlow({ services, days: initialDays, initialDate, initialSlots, esPrimerRehab, schedules }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
@@ -82,7 +87,6 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
   const [loadingSlots, setLoadingSlots] = React.useState(false);
   const [selectedSlot, setSelectedSlot] = React.useState<SlotView | null>(null);
   const [notes, setNotes] = React.useState("");
-  const [availabilityOpen, setAvailabilityOpen] = React.useState(false);
 
   // Caché en memoria de las franjas por día ya consultado.
   const cacheRef = React.useRef<Map<string, SlotView[]>>(new Map());
@@ -142,20 +146,6 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
     }
   }, []);
 
-  // Selección rápida desde el modal de disponibilidad: siembra día + franja en
-  // el flujo existente (sin re-fetch) y cierra el modal.
-  const handlePickFromModal = React.useCallback(
-    (date: string, daySlots: SlotView[], slot: SlotView) => {
-      cacheRef.current.set(date, daySlots);
-      selectedDateRef.current = date;
-      setSelectedDate(date);
-      setSlots(daySlots);
-      setSelectedSlot(slot);
-      setAvailabilityOpen(false);
-    },
-    [],
-  );
-
   const handleServiceSelect = React.useCallback((service: ServiceOption) => {
     setSelectedService(service);
     setSelectedDate(null);
@@ -163,7 +153,6 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
     setSelectedSlot(null);
     setSlots([]);
     cacheRef.current.clear();
-    setAvailabilityOpen(true);
     // Los días se recargarán vía fetchDays o podemos usar los initialDays
     // filtrados por servicio. Usamos la API de días si existe, o filtramos
     // del listado existente.
@@ -307,6 +296,13 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
             selectedId={selectedService?.id ?? null}
             onSelect={handleServiceSelect}
           />
+          {selectedService && (
+            <ServiceScheduleHint
+              serviceName={selectedService.name}
+              entries={schedules[selectedService.id] ?? []}
+              restrictRehab={restrictRehab}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -451,14 +447,6 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
           </div>
         </CardContent>
       </Card>
-
-      <ServiceAvailabilityDialog
-        open={availabilityOpen}
-        onOpenChange={setAvailabilityOpen}
-        service={selectedService}
-        restrictRehab={restrictRehab}
-        onPick={handlePickFromModal}
-      />
     </div>
   );
 }

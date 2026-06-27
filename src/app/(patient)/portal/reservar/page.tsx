@@ -6,6 +6,7 @@ import { requirePatient } from "@/lib/auth/session";
 import { toLocalDateKey } from "@/lib/datetime";
 import { slotService } from "@/server/services/slot.service";
 import { serviceService } from "@/server/services/service.service";
+import { slotTemplateService } from "@/server/services/slot-template.service";
 import { bookingService } from "@/server/services/booking.service";
 
 export const metadata: Metadata = { title: "Reservar turno" };
@@ -14,10 +15,11 @@ export const dynamic = "force-dynamic";
 export default async function BookingPage() {
   const user = await requirePatient();
 
-  const [days, services, rehabLibre] = await Promise.all([
+  const [days, services, rehabLibre, schedules] = await Promise.all([
     slotService.getUpcomingDays(),
     serviceService.listActive(),
     bookingService.puedeReservarRehabLibre(user.id),
+    slotTemplateService.activeScheduleByService(),
   ]);
 
   // La restricción de horarios de REHAB se mantiene hasta que el paciente
@@ -44,6 +46,7 @@ export default async function BookingPage() {
         esPrimerRehab={esPrimerRehab}
         todayKey={todayKey}
         defaultToDate={defaultToDate}
+        schedules={schedules}
       />
     </div>
   );
