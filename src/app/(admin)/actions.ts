@@ -13,6 +13,10 @@ import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
 import { editPatientSchema } from "@/lib/validations/patient";
 import {
+  adminBookSchema,
+  createPatientSchema,
+} from "@/lib/validations/admin-booking";
+import {
   registerCopagoSchema,
   registerExtraSchema,
   updateCopagoAmountSchema,
@@ -264,6 +268,44 @@ export async function reactivatePatientAction(
     await patientService.reactivatePatient(userId);
     revalidatePath("/admin/pacientes");
     return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+// ── Carga de turnos por el profesional + alta de pacientes ───────────────────
+export async function adminBookAction(
+  input: unknown,
+): Promise<ActionResult<{ override: boolean }>> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const data = adminBookSchema.parse(input);
+    const result = await bookingService.adminBook({
+      slotId: data.slotId,
+      userId: data.userId,
+      notes: data.notes || null,
+      override: data.override,
+      adminId: pro.id,
+    });
+    revalidatePath("/admin");
+    revalidatePath("/admin/asistencias");
+    revalidatePath("/admin/pacientes");
+    return ok({ override: result.override });
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Alta de paciente nuevo. Devuelve la contraseña temporal UNA sola vez. */
+export async function adminCreatePatientAction(
+  input: unknown,
+): Promise<ActionResult<{ userId: string; name: string; email: string; tempPassword: string }>> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const data = createPatientSchema.parse(input);
+    const { userId, tempPassword } = await patientService.createPatient(data, pro.id);
+    revalidatePath("/admin/pacientes");
+    return ok({ userId, name: data.name, email: data.email, tempPassword });
   } catch (error) {
     return fromError(error);
   }

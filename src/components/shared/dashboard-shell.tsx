@@ -38,6 +38,7 @@ interface NavItem {
 const ADMIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Asistencias", href: "/admin/asistencias", icon: ClipboardCheck },
+  { label: "Cargar turno", href: "/admin/cargar-turno", icon: CalendarPlus },
   { label: "Plantillas", href: "/admin/plantillas", icon: CalendarClock },
   { label: "Pacientes", href: "/admin/pacientes", icon: Users },
   { label: "Finanzas", href: "/admin/finanzas", icon: Wallet },

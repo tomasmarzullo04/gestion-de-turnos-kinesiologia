@@ -180,6 +180,97 @@ export const bookingService = {
   },
 
   /**
+   * El profesional carga un turno a un paciente. Dentro de cupo usa `book_slot`
+   * (atómico). Si la franja está llena y `override`, inserta un SOBRECUPO de
+   * forma atómica (lock `FOR UPDATE`), marcado (`is_override`) y auditado
+   * (`override_by`). El sobrecupo excepciona SOLO el cupo: se siguen respetando
+   * franja bloqueada, duplicado y la ventana del primer REHAB.
+   */
+  async adminBook(params: {
+    slotId: string;
+    userId: string;
+    notes?: string | null;
+    override: boolean;
+    adminId: string;
+  }): Promise<{ bookingId: string | null; override: boolean }> {
+    const { slotId, userId, notes, override, adminId } = params;
+
+    const rows = await prisma.$queryRaw<
+      {
+        service_id: string | null;
+        service_slug: string | null;
+        dow: number;
+        hour: number;
+        capacity: number;
+        booked_count: number;
+        is_blocked: boolean;
+        is_future: boolean;
+      }[]
+    >`
+      SELECT s.service_id::text AS service_id,
+             sv.slug AS service_slug,
+             extract(dow FROM s.date)::int AS dow,
+             extract(hour FROM s.start_time)::int AS hour,
+             s.capacity, s.booked_count, s.is_blocked,
+             ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now() AS is_future
+      FROM slots s
+      LEFT JOIN services sv ON sv.id = s.service_id
+      WHERE s.id = ${slotId}::uuid
+    `;
+    const slot = rows[0];
+    if (!slot) throw new BusinessError(ERROR_MESSAGES.SLOT_NOT_FOUND);
+    if (slot.is_blocked) throw new BusinessError(ERROR_MESSAGES.SLOT_BLOCKED);
+    if (!slot.is_future) {
+      throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
+    }
+
+    // Regla del primer REHAB (se respeta incluso en sobrecupo).
+    if (slot.service_slug === REHAB_SLUG && slot.service_id) {
+      const libre = await this.puedeReservarRehabLibre(userId);
+      if (!libre && !isRehabFirstTimeSlotAllowed(slot.dow, slot.hour)) {
+        throw new BusinessError(REHAB_FIRST_TIME_MESSAGE);
+      }
+    }
+
+    const wasFull = slot.booked_count >= slot.capacity;
+
+    if (override && wasFull) {
+      const bookingId = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM slots WHERE id = ${slotId}::uuid FOR UPDATE`;
+        const dup = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM bookings
+          WHERE slot_id = ${slotId}::uuid AND user_id = ${userId}::text AND status <> 'CANCELLED'
+        `;
+        if (dup.length > 0) throw new BusinessError(ERROR_MESSAGES.ALREADY_BOOKED);
+        const ins = await tx.$queryRaw<{ id: string }[]>`
+          INSERT INTO bookings (slot_id, user_id, service_id, status, notes, is_override, override_by)
+          VALUES (${slotId}::uuid, ${userId}::text, ${slot.service_id}::uuid, 'CONFIRMED',
+                  ${notes ?? null}, true, ${adminId})
+          RETURNING id
+        `;
+        await tx.$executeRaw`
+          UPDATE slots SET booked_count = booked_count + 1 WHERE id = ${slotId}::uuid
+        `;
+        return ins[0]?.id ?? null;
+      });
+      logger.info("Sobrecupo cargado", { slotId, userId, adminId });
+      return { bookingId, override: true };
+    }
+
+    // Dentro de cupo (o sin override): book_slot resuelve la concurrencia.
+    try {
+      const booked = await prisma.$queryRaw<{ booking_id: string | null }[]>`
+        SELECT b.id AS booking_id
+        FROM book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+      `;
+      logger.info("Turno cargado por profesional", { slotId, userId, adminId });
+      return { bookingId: booked[0]?.booking_id ?? null, override: false };
+    } catch (error) {
+      rethrowAsBusiness(error);
+    }
+  },
+
+  /**
    * Cancela una reserva propia. Para pacientes se aplica la ventana mínima de
    * antelación (`CANCELLATION_MIN_HOURS`); la liberación del cupo la hace
    * `cancel_booking` de forma atómica.

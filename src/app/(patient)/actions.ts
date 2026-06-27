@@ -14,6 +14,7 @@ import {
   cancelSeriesSchema,
 } from "@/lib/validations/booking";
 import { profileSchema } from "@/lib/validations/auth";
+import { onboardingSchema } from "@/lib/validations/admin-booking";
 import { emitEvent } from "@/server/events/emitter";
 import {
   bookingService,
@@ -182,6 +183,27 @@ export async function cancelSeriesAction(
     revalidatePath("/portal");
     revalidatePath("/portal/turnos");
     return ok({ cancelled });
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Onboarding del paciente: define su contraseña y completa/corrige sus datos. */
+export async function completeOnboardingAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const user = await assertRole(ROLES.PATIENT);
+    const data = onboardingSchema.parse(input);
+    await patientService.completeOnboarding(user.id, {
+      name: data.name,
+      phone: data.phone || null,
+      tipoCoberturaString: data.tipoCoberturaString,
+      obraSocialNombre: data.obraSocialNombre || null,
+      password: data.password,
+    });
+    revalidatePath("/portal");
+    return ok(undefined);
   } catch (error) {
     return fromError(error);
   }

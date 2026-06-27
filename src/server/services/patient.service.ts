@@ -1,6 +1,31 @@
-import { TIMEZONE } from "@/lib/constants";
+import { randomInt } from "node:crypto";
+
+import { hash } from "bcryptjs";
+
+import { TIMEZONE, ROLES } from "@/lib/constants";
 import { prisma } from "@/lib/db";
 import { BusinessError } from "@/server/errors";
+
+const SALT_ROUNDS = 12;
+
+/** Contraseña temporal robusta (minúscula + mayúscula + dígito, 10 chars). */
+function generateTempPassword(): string {
+  const lower = "abcdefghijkmnpqrstuvwxyz";
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const digit = "23456789";
+  const all = lower + upper + digit;
+  const chars: string[] = [
+    lower[randomInt(lower.length)]!,
+    upper[randomInt(upper.length)]!,
+    digit[randomInt(digit.length)]!,
+  ];
+  for (let i = 0; i < 7; i++) chars.push(all[randomInt(all.length)]!);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j]!, chars[i]!];
+  }
+  return chars.join("");
+}
 
 export interface PatientRow {
   id: string;
@@ -292,6 +317,106 @@ export const patientService = {
     await prisma.user.update({
       where: { id: userId },
       data: { archivedAt: null, archivedBy: null },
+    });
+  },
+
+  /**
+   * Alta de paciente por el profesional. Genera una contraseña TEMPORAL (se
+   * guarda hasheada, nunca en texto plano) que se devuelve UNA sola vez para
+   * entregarla al paciente; queda `mustChangePassword` para forzar el onboarding
+   * en el primer ingreso. Audita quién la creó (`createdBy`).
+   */
+  async createPatient(
+    data: {
+      name: string;
+      email: string;
+      phone?: string | null;
+      tipoCoberturaString?: string | null;
+      obraSocialNombre?: string | null;
+      requiereCopago?: boolean;
+    },
+    adminId: string,
+  ): Promise<{ userId: string; tempPassword: string }> {
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BusinessError("Ya existe una cuenta con ese email.");
+    }
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hash(tempPassword, SALT_ROUNDS);
+
+    const user = await prisma.user.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        passwordHash,
+        role: ROLES.PATIENT,
+        phone: data.phone ? data.phone : null,
+        tipoCoberturaString: data.tipoCoberturaString ?? null,
+        obraSocialNombre: data.obraSocialNombre ?? null,
+        requiereCopago: data.requiereCopago ?? false,
+        mustChangePassword: true,
+        createdBy: adminId,
+      },
+      select: { id: true },
+    });
+
+    return { userId: user.id, tempPassword };
+  },
+
+  /** ¿El paciente debe completar el onboarding (cambio de clave)? Resiliente. */
+  async needsOnboarding(userId: string): Promise<boolean> {
+    try {
+      const rows = await prisma.$queryRaw<{ must: boolean }[]>`
+        SELECT must_change_password AS must FROM "User" WHERE id = ${userId}
+      `;
+      return rows[0]?.must ?? false;
+    } catch {
+      return false;
+    }
+  },
+
+  /** Datos para precargar el formulario de onboarding. */
+  async getOnboardingData(userId: string) {
+    return prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        name: true,
+        phone: true,
+        tipoCoberturaString: true,
+        obraSocialNombre: true,
+      },
+    });
+  },
+
+  /**
+   * Completa el onboarding: define la nueva contraseña (hasheada), corrige datos
+   * y baja la bandera `mustChangePassword`.
+   */
+  async completeOnboarding(
+    userId: string,
+    data: {
+      name: string;
+      phone?: string | null;
+      tipoCoberturaString: string;
+      obraSocialNombre?: string | null;
+      password: string;
+    },
+  ): Promise<void> {
+    const passwordHash = await hash(data.password, SALT_ROUNDS);
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: data.name,
+        phone: data.phone ? data.phone : null,
+        tipoCoberturaString: data.tipoCoberturaString,
+        obraSocialNombre: data.obraSocialNombre ?? null,
+        passwordHash,
+        mustChangePassword: false,
+      },
     });
   },
 

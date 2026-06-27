@@ -72,6 +72,10 @@ model User {
   archivedBy            String?   @map("archived_by")
   updatedBy             String?   @map("updated_by")
 
+  // ── Alta por el profesional + onboarding ────────────────────────────────
+  mustChangePassword    Boolean   @default(false) @map("must_change_password")
+  createdBy             String?   @map("created_by")
+
   @@index([role])
   @@index([archivedAt])
 }
@@ -150,6 +154,8 @@ model Booking {
   status    String   @default("CONFIRMED") // "CONFIRMED" | "CANCELLED"
   notes     String?
   recurrenceId String? @map("recurrence_id") @db.Uuid
+  isOverride Boolean  @default(false) @map("is_override")
+  overrideBy String?  @map("override_by")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   slot      Slot        @relation(fields: [slotId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   service   Service?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)
