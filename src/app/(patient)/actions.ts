@@ -3,9 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+
 import { fail, fromError, ok } from "@/lib/action-result";
 import { assertAuthenticated, assertRole } from "@/lib/auth/session";
-import { ROLES } from "@/lib/constants";
+import { DAYS_OF_WEEK, ROLES } from "@/lib/constants";
+import { parseLocalDateKey } from "@/lib/datetime";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   bookSeriesSchema,
@@ -24,6 +28,12 @@ import { patientService } from "@/server/services/patient.service";
 import { serviceService } from "@/server/services/service.service";
 import { userRepository } from "@/server/repositories/user.repository";
 import { type ActionResult } from "@/types";
+
+/** Une etiquetas de días en texto legible: "Lunes, Miércoles y Viernes". */
+function formatDayList(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} y ${labels[labels.length - 1]}`;
+}
 
 export async function bookSlotAction(input: unknown): Promise<ActionResult<{ isFirstTime?: boolean }>> {
   try {
@@ -146,6 +156,48 @@ export async function bookSeriesAction(
       toDate: data.toDate,
       notes: data.notes || null,
     });
+
+    // Evento appointment.series.confirmed: una sola notificación con TODAS las
+    // fechas de la serie (formato distinto al turno único). Igual que el flujo
+    // actual: se emite con after() (no bloquea ni rompe la reserva) y la firma
+    // HMAC la agrega el emisor. Solo si se reservó al menos una fecha.
+    if (result.booked > 0) {
+      const booked = result.results.filter((r) => r.status === "booked");
+      const recurrenceId = result.recurrenceId;
+      after(async () => {
+        const service = await serviceService.findById(data.serviceId);
+        const dayLabels = DAYS_OF_WEEK.filter((d) => data.daysOfWeek.includes(d.value))
+          .sort((a, b) => (a.value === 0 ? 7 : a.value) - (b.value === 0 ? 7 : b.value))
+          .map((d) => d.label);
+        const endTime = booked[0]?.endTime ?? null;
+        await emitEvent(
+          "appointment.series.confirmed",
+          {
+            series: {
+              id: recurrenceId,
+              booked: result.booked,
+              total: result.total,
+            },
+            service: { id: data.serviceId, name: service?.name ?? null },
+            patient: { name: user.name, email: user.email },
+            pattern: {
+              daysOfWeek: data.daysOfWeek,
+              days: dayLabels,
+              startTime: data.startTime,
+              endTime,
+              summary: `${formatDayList(dayLabels)} · ${data.startTime}${endTime ? `–${endTime}` : ""} hs`,
+            },
+            dates: booked.map((r) => ({
+              date: r.date,
+              label: format(parseLocalDateKey(r.date), "EEEE d 'de' MMMM", { locale: es }),
+              startTime: r.startTime,
+              endTime: r.endTime,
+            })),
+          },
+          `${recurrenceId}:appointment.series.confirmed`,
+        );
+      });
+    }
 
     revalidatePath("/portal");
     revalidatePath("/portal/reservar");
