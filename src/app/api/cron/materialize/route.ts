@@ -19,12 +19,29 @@ async function handle(request: NextRequest) {
 
   try {
     const result = await generationService.syncFutureSlots();
+    const horizon = await generationService.getHorizon();
+
+    // Observabilidad: log claro en cada corrida + alerta si algo anda mal.
+    logger.info("Cron materialize OK", {
+      created: result.created,
+      updated: result.updated,
+      removed: result.removed,
+      conflicts: result.conflicts.length,
+      horizon,
+    });
+    if (!horizon) {
+      logger.error(
+        "ALERTA: la agenda quedó vacía tras materializar. ¿Hay plantillas activas?",
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       created: result.created,
       updated: result.updated,
       removed: result.removed,
       conflicts: result.conflicts.length,
+      horizon,
     });
   } catch (error) {
     logger.error("Cron materialize falló", { error: String(error) });

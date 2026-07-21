@@ -161,6 +161,41 @@ export const generationService = {
       })),
     };
   },
+
+  /**
+   * Red de seguridad (defensa en profundidad): si el horizonte de franjas cayó
+   * por debajo del objetivo, rellena la ventana. En el caso normal es barato
+   * (una sola agregación sobre `slots`); solo dispara el `syncFutureSlots`
+   * completo cuando realmente falta agenda. NO reemplaza al cron diario: es un
+   * complemento para que la ventana se autorregenere ante cualquier visita.
+   *
+   * @returns `true` si tuvo que rellenar.
+   */
+  async ensureWindow(days = BOOKING_CONFIG.generationDays): Promise<boolean> {
+    // Margen de 7 días: solo rellena cuando el horizonte baja de days-7 para no
+    // recomputar en cada visita.
+    const rows = await prisma.$queryRaw<{ needs: boolean }[]>`
+      SELECT (
+        max(date) IS NULL
+        OR max(date) < current_date + ((${days - 7}) || ' days')::interval
+      ) AS needs
+      FROM slots
+      WHERE date >= current_date
+    `;
+    if (!rows[0]?.needs) return false;
+
+    logger.warn("Horizonte de agenda corto: rellenando (safety net)", { days });
+    await this.syncFutureSlots(days);
+    return true;
+  },
+
+  /** Fecha máxima de franjas futuras materializadas (para observabilidad). */
+  async getHorizon(): Promise<string | null> {
+    const rows = await prisma.$queryRaw<{ max: string | null }[]>`
+      SELECT max(date)::text AS max FROM slots WHERE date >= current_date
+    `;
+    return rows[0]?.max ?? null;
+  },
 };
 
 export interface SyncConflict {

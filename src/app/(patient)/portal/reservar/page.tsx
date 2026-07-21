@@ -7,6 +7,7 @@ import { toLocalDateKey } from "@/lib/datetime";
 import { slotService } from "@/server/services/slot.service";
 import { serviceService } from "@/server/services/service.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
+import { generationService } from "@/server/services/generation.service";
 import { bookingService } from "@/server/services/booking.service";
 
 export const metadata: Metadata = { title: "Reservar turno" };
@@ -14,6 +15,15 @@ export const dynamic = "force-dynamic";
 
 export default async function BookingPage() {
   const user = await requirePatient();
+
+  // Red de seguridad: si el horizonte de agenda quedó corto, se rellena antes de
+  // listar los días (barato salvo cuando falta agenda). El mecanismo principal es
+  // el cron diario (vercel.json → /api/cron/materialize).
+  try {
+    await generationService.ensureWindow();
+  } catch {
+    // Nunca bloquear la reserva por el mantenimiento de la ventana.
+  }
 
   const [days, services, rehabLibre, schedules] = await Promise.all([
     slotService.getUpcomingDays(),
