@@ -22,7 +22,7 @@ function clampYear(value: number, fallback: number): number {
 export default async function FinanzasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; y?: string }>;
+  searchParams: Promise<{ m?: string; y?: string; service?: string }>;
 }) {
   const sp = await searchParams;
   const todayKey = toLocalDateKey(new Date());
@@ -30,8 +30,10 @@ export default async function FinanzasPage({
   const month = clampMonth(Number(sp.m), Number(mStr));
   const year = clampYear(Number(sp.y), Number(yStr));
 
+  const serviceId = sp.service;
+
   const [summary, copagoAmount, patients, services] = await Promise.all([
-    paymentService.getMonthlySummary(month, year),
+    paymentService.getMonthlySummary(month, year, serviceId),
     paymentService.getCopagoAmount(),
     patientService.listBasic(),
     serviceService.listActive(),
@@ -51,6 +53,7 @@ export default async function FinanzasPage({
         patients={patients}
         todayKey={todayKey}
         services={services.map((s) => ({ id: s.id, name: s.name }))}
+        selectedServiceId={serviceId}
       />
     </div>
   );

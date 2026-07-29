@@ -126,8 +126,20 @@ export const paymentService = {
   },
 
   /** Resumen económico de un mes: totales (en base), contadores y movimientos. */
-  async getMonthlySummary(month: number, year: number): Promise<MonthlySummary> {
+  async getMonthlySummary(month: number, year: number, serviceId?: string): Promise<MonthlySummary> {
     const prev = month === 1 ? { m: 12, y: year - 1 } : { m: month - 1, y: year };
+    
+    let serviceFilter = Prisma.empty;
+    let pServiceFilter = Prisma.empty;
+    if (serviceId) {
+      if (serviceId === "unassigned") {
+        serviceFilter = Prisma.sql`AND service_id IS NULL`;
+        pServiceFilter = Prisma.sql`AND p.service_id IS NULL`;
+      } else {
+        serviceFilter = Prisma.sql`AND service_id = ${serviceId}::uuid`;
+        pServiceFilter = Prisma.sql`AND p.service_id = ${serviceId}::uuid`;
+      }
+    }
 
     const empty: MonthlySummary = {
       totalCopagos: 0,
@@ -158,12 +170,12 @@ export const paymentService = {
           count(*)::int                                                AS payment_count,
           count(DISTINCT user_id)::int                                 AS payers
         FROM payments
-        WHERE period_year = ${year} AND period_month = ${month} AND voided_at IS NULL
+        WHERE period_year = ${year} AND period_month = ${month} AND voided_at IS NULL ${serviceFilter}
       `,
       prisma.$queryRaw<{ total: number }[]>`
         SELECT coalesce(sum(amount), 0)::int AS total
         FROM payments
-        WHERE period_year = ${prev.y} AND period_month = ${prev.m} AND voided_at IS NULL
+        WHERE period_year = ${prev.y} AND period_month = ${prev.m} AND voided_at IS NULL ${serviceFilter}
       `,
       prisma.$queryRaw<
         {
@@ -184,7 +196,7 @@ export const paymentService = {
         FROM payments p
         LEFT JOIN "User" u ON u.id = p.user_id
         LEFT JOIN services sv ON sv.id = p.service_id
-        WHERE p.period_year = ${year} AND p.period_month = ${month} AND p.voided_at IS NULL
+        WHERE p.period_year = ${year} AND p.period_month = ${month} AND p.voided_at IS NULL ${pServiceFilter}
         ORDER BY p.paid_at DESC, p.recorded_at DESC
       `,
       // ── Desglose de ingresos por servicio ────────────────────────────────
@@ -206,6 +218,7 @@ export const paymentService = {
         WHERE p.period_year = ${year}
           AND p.period_month = ${month}
           AND p.voided_at IS NULL
+          ${pServiceFilter}
         GROUP BY p.service_id, sv.name, sv.color
         ORDER BY total DESC
       `,

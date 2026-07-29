@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Ban,
   ChevronLeft,
@@ -67,6 +68,7 @@ interface Props {
   patients: { id: string; name: string }[];
   todayKey: string;
   services: ServiceOption[];
+  selectedServiceId?: string;
 }
 
 export function FinanzasView({
@@ -77,7 +79,9 @@ export function FinanzasView({
   patients,
   todayKey,
   services,
+  selectedServiceId,
 }: Props) {
+  const router = useRouter();
   const [extraOpen, setExtraOpen] = React.useState(false);
   const [amountOpen, setAmountOpen] = React.useState(false);
   const [voiding, setVoiding] = React.useState<PaymentMovement | null>(null);
@@ -116,7 +120,32 @@ export function FinanzasView({
             </Link>
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <Select 
+            value={selectedServiceId || "all"} 
+            onValueChange={(val) => {
+              const url = new URL(window.location.href);
+              if (val === "all") {
+                url.searchParams.delete("service");
+              } else {
+                url.searchParams.set("service", val);
+              }
+              router.push(url.pathname + url.search);
+            }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Todos los servicios" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los servicios</SelectItem>
+              <SelectItem value="unassigned">Sin servicio</SelectItem>
+              {services.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={() => setAmountOpen(true)}>
             <Settings2 className="h-4 w-4" />
             Copago: {formatARS(copagoAmount)}
