@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { formatApellidoNombre } from "@/lib/names";
 import { formatARS } from "@/lib/money";
 import { type MyBooking } from "@/server/services/booking.service";
 
@@ -221,7 +222,7 @@ export function PatientsTable({
                   <TableRow key={p.id}>
                     <TableCell className="whitespace-nowrap font-medium">
                       <div className="flex items-center gap-2">
-                        {p.name}
+                        {formatApellidoNombre(p.name, p.apellido)}
                         {p.archived ? (
                           <Badge variant="secondary" className="bg-muted text-muted-foreground">
                             Archivado
