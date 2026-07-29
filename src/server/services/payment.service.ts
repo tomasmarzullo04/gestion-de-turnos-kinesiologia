@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { TIMEZONE } from "@/lib/constants";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
