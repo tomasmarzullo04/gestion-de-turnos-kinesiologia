@@ -10,11 +10,16 @@ import {
   ChevronRight,
   ClipboardList,
   Search,
+  Trash2,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { markAttendanceAction } from "@/app/(admin)/actions";
+import {
+  CancelTurnoDialog,
+  type CancelTarget,
+} from "@/components/features/cancel-turno-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -91,6 +96,7 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
   const router = useRouter();
   const [items, setItems] = React.useState<AttendanceSlot[]>(slots);
   const [query, setQuery] = React.useState("");
+  const [cancelTarget, setCancelTarget] = React.useState<CancelTarget | null>(null);
   const [isPending, startTransition] = React.useTransition();
 
   const day = parseLocalDateKey(selectedDate);
@@ -305,11 +311,32 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
                               )}
                             </div>
                           </div>
-                          <AttendanceControl
-                            value={a.status}
-                            disabled={isPending}
-                            onChange={(status) => mark(a.bookingId, status)}
-                          />
+                          <div className="flex shrink-0 items-center gap-2">
+                            <AttendanceControl
+                              value={a.status}
+                              disabled={isPending}
+                              onChange={(status) => mark(a.bookingId, status)}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Eliminar turno de ${a.name}`}
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() =>
+                                setCancelTarget({
+                                  bookingId: a.bookingId,
+                                  recurrenceId: a.recurrenceId,
+                                  patientName: a.name,
+                                  serviceName: a.serviceName,
+                                  date: selectedDate,
+                                  startTime: slot.startTime,
+                                  endTime: slot.endTime,
+                                })
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -335,6 +362,26 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
             )}
         </div>
       )}
+
+      <CancelTurnoDialog
+        target={cancelTarget}
+        open={Boolean(cancelTarget)}
+        onOpenChange={(open) => !open && setCancelTarget(null)}
+        onDone={() => {
+          const bid = cancelTarget?.bookingId;
+          if (!bid) return;
+          setItems((prev) =>
+            prev.map((slot) => {
+              const has = slot.attendees.some((a) => a.bookingId === bid);
+              return {
+                ...slot,
+                bookedCount: has ? Math.max(0, slot.bookedCount - 1) : slot.bookedCount,
+                attendees: slot.attendees.filter((a) => a.bookingId !== bid),
+              };
+            }),
+          );
+        }}
+      />
     </div>
   );
 }

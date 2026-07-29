@@ -23,6 +23,10 @@ import {
   updatePatientAction,
 } from "@/app/(admin)/actions";
 import { BookingCard } from "@/components/features/booking-card";
+import {
+  CancelTurnoDialog,
+  type CancelTarget,
+} from "@/components/features/cancel-turno-dialog";
 import { CopagoDialog } from "@/components/features/copago-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SubmitButton } from "@/components/shared/submit-button";
@@ -113,6 +117,7 @@ export function PatientsTable({
   const [copagoFor, setCopagoFor] = React.useState<PatientRow | null>(null);
   const [deleting, setDeleting] = React.useState<PatientRow | null>(null);
   const [bookings, setBookings] = React.useState<MyBooking[]>([]);
+  const [cancelTarget, setCancelTarget] = React.useState<CancelTarget | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
 
@@ -354,7 +359,40 @@ export function PatientsTable({
                     description="Este paciente todavía no reservó turnos."
                   />
                 ) : (
-                  bookings.map((b) => <BookingCard key={b.id} booking={b} />)
+                  bookings.map((b) => {
+                    const cancelable =
+                      b.status === "CONFIRMED" &&
+                      new Date(b.startsAtISO).getTime() >= Date.now();
+                    return (
+                      <BookingCard
+                        key={b.id}
+                        booking={b}
+                        action={
+                          cancelable && selected ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() =>
+                                setCancelTarget({
+                                  bookingId: b.id,
+                                  recurrenceId: b.recurrenceId,
+                                  patientName: selected.name,
+                                  serviceName: b.serviceName,
+                                  date: b.date,
+                                  startTime: b.startTime,
+                                  endTime: b.endTime,
+                                })
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Eliminar
+                            </Button>
+                          ) : undefined
+                        }
+                      />
+                    );
+                  })
                 )}
               </div>
             </TabsContent>
@@ -463,6 +501,21 @@ export function PatientsTable({
       <DeletePatientDialog
         patient={deleting}
         onClose={() => setDeleting(null)}
+      />
+
+      <CancelTurnoDialog
+        target={cancelTarget}
+        open={Boolean(cancelTarget)}
+        onOpenChange={(open) => !open && setCancelTarget(null)}
+        onDone={() => {
+          if (selected) {
+            setLoading(true);
+            void getPatientBookingsAction(selected.id).then((result) => {
+              if (result.success) setBookings(result.data);
+              setLoading(false);
+            });
+          }
+        }}
       />
     </>
   );

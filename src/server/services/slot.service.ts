@@ -35,6 +35,7 @@ export interface SlotAttendee {
   name: string;
   email: string;
   notes: string | null;
+  recurrenceId: string | null;
 }
 
 export interface AdminSlotView extends SlotView {
@@ -189,7 +190,7 @@ export const slotService = {
         status: "CONFIRMED",
         slot: { date: new Date(`${dateKey}T00:00:00.000Z`) },
       },
-      select: { id: true, slotId: true, userId: true, notes: true },
+      select: { id: true, slotId: true, userId: true, notes: true, recurrenceId: true },
     });
 
     // Resolver nombres de pacientes (bookings.user_id = User.id, sin FK).
@@ -211,6 +212,7 @@ export const slotService = {
             name: u?.name ?? "Paciente",
             email: u?.email ?? "—",
             notes: b.notes,
+            recurrenceId: b.recurrenceId,
           };
         });
       return { ...view, attendees };

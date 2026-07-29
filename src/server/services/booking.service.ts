@@ -319,7 +319,7 @@ export const bookingService = {
    * Cancela como ADMIN: resuelve el dueño de la reserva y llama a la función
    * con ese user_id (la función valida pertenencia). Sin ventana de antelación.
    */
-  async adminCancel(bookingId: string): Promise<void> {
+  async adminCancel(bookingId: string, adminId?: string): Promise<void> {
     const rows = await prisma.$queryRaw<{ user_id: string }[]>`
       SELECT user_id FROM bookings
       WHERE id = ${bookingId}::uuid AND status <> 'CANCELLED'
@@ -332,9 +332,47 @@ export const bookingService = {
       await prisma.$executeRaw`
         SELECT cancel_booking(${bookingId}::uuid, ${ownerId}::text)
       `;
-      logger.info("Reserva cancelada por admin", { bookingId });
+      await this.auditCancel(bookingId, adminId);
+      logger.info("Reserva cancelada por admin", { bookingId, adminId });
     } catch (error) {
       rethrowAsBusiness(error);
+    }
+  },
+
+  /**
+   * Cancela como ADMIN todos los turnos FUTUROS de una serie (turno fijo). Cada
+   * fecha pasa por `cancel_booking` (atómico, libera cupo). Los pasados no se
+   * tocan. Devuelve cuántos se cancelaron.
+   */
+  async adminCancelSeries(recurrenceId: string, adminId?: string): Promise<number> {
+    const future = await prisma.$queryRaw<{ id: string; user_id: string }[]>`
+      SELECT b.id, b.user_id
+      FROM bookings b
+      JOIN slots s ON s.id = b.slot_id
+      WHERE b.recurrence_id = ${recurrenceId}::uuid
+        AND b.status <> 'CANCELLED'
+        AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) >= now()
+    `;
+    for (const row of future) {
+      await prisma.$executeRaw`
+        SELECT cancel_booking(${row.id}::uuid, ${row.user_id}::text)
+      `;
+      await this.auditCancel(row.id, adminId);
+    }
+    logger.info("Serie cancelada por admin", { recurrenceId, adminId, cancelled: future.length });
+    return future.length;
+  },
+
+  /** Auditoría de cancelación (best-effort: no rompe si faltan las columnas). */
+  async auditCancel(bookingId: string, adminId?: string): Promise<void> {
+    if (!adminId) return;
+    try {
+      await prisma.$executeRaw`
+        UPDATE bookings SET cancelled_by = ${adminId}, cancelled_at = now()
+        WHERE id = ${bookingId}::uuid
+      `;
+    } catch {
+      /* columnas cancelled_by/at pendientes de migración */
     }
   },
 
