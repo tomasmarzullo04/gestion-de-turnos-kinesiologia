@@ -121,8 +121,9 @@ export function FinanzasView({
           </Button>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <Select 
-            value={selectedServiceId || "all"} 
+          <Select
+            value={selectedServiceId || "all"}
+            disabled={isPending}
             onValueChange={(val) => {
               const url = new URL(window.location.href);
               if (val === "all") {
@@ -130,10 +131,14 @@ export function FinanzasView({
               } else {
                 url.searchParams.set("service", val);
               }
-              router.push(url.pathname + url.search);
+              // startTransition: navegación concurrente → mantiene la UI visible
+              // y da estado de carga en vez de congelarse.
+              startTransition(() => {
+                router.push(url.pathname + url.search);
+              });
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px]" aria-busy={isPending}>
               <SelectValue placeholder="Todos los servicios" />
             </SelectTrigger>
             <SelectContent>
@@ -383,7 +388,7 @@ function ExtraDialog({
         concept,
         amount,
         paidAt,
-        serviceId: serviceId || undefined,
+        serviceId,
       });
       if (result.success) {
         toast.success("Cobro extra registrado");
@@ -423,7 +428,7 @@ function ExtraDialog({
             <Label>Servicio</Label>
             <Select value={serviceId} onValueChange={setServiceId}>
               <SelectTrigger>
-                <SelectValue placeholder="Seleccioná un servicio (opcional)" />
+                <SelectValue placeholder="Seleccioná un servicio" />
               </SelectTrigger>
               <SelectContent>
                 {services.map((s) => (
@@ -471,7 +476,7 @@ function ExtraDialog({
             <SubmitButton
               loading={isPending}
               loadingText="Registrando…"
-              disabled={!userId || !concept.trim() || !(amount >= 1)}
+              disabled={!userId || !serviceId || !concept.trim() || !(amount >= 1)}
             >
               Registrar
             </SubmitButton>

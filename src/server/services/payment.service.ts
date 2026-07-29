@@ -79,17 +79,16 @@ export const paymentService = {
     unitAmount: number;
     paidAt: string;
     recordedById: string;
-    serviceId?: string;
+    serviceId: string;
   }): Promise<void> {
     const total = input.quantity * input.unitAmount;
     const [y, m] = input.paidAt.split("-").map(Number);
-    const sid = input.serviceId ?? null;
     await prisma.$executeRaw`
       INSERT INTO payments
         (user_id, type, amount, quantity, period_month, period_year, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'COPAGO', ${total}, ${input.quantity},
-         ${m}, ${y}, ${input.paidAt}::date, ${input.recordedById}, ${sid}::uuid)
+         ${m}, ${y}, ${input.paidAt}::date, ${input.recordedById}, ${input.serviceId}::uuid)
     `;
   },
 
@@ -100,16 +99,15 @@ export const paymentService = {
     concept: string;
     paidAt: string;
     recordedById: string;
-    serviceId?: string;
+    serviceId: string;
   }): Promise<void> {
     const [y, m] = input.paidAt.split("-").map(Number);
-    const sid = input.serviceId ?? null;
     await prisma.$executeRaw`
       INSERT INTO payments
         (user_id, type, amount, quantity, period_month, period_year, concept, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'EXTRA', ${input.amount}, 1,
-         ${m}, ${y}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById}, ${sid}::uuid)
+         ${m}, ${y}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById}, ${input.serviceId}::uuid)
     `;
   },
 

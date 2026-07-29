@@ -79,7 +79,7 @@ export function CopagoDialog({
         quantity,
         unitAmount,
         paidAt,
-        serviceId: serviceId || undefined,
+        serviceId,
       });
       if (result.success) {
         toast.success(
@@ -131,13 +131,13 @@ export function CopagoDialog({
             </p>
           ) : (
             <>
-              {/* Selector de servicio */}
+              {/* Selector de servicio (obligatorio) */}
               {services && services.length > 0 && (
                 <div className="space-y-2">
                   <Label>Servicio</Label>
                   <Select value={serviceId} onValueChange={setServiceId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Seleccioná un servicio (opcional)" />
+                      <SelectValue placeholder="Seleccioná un servicio" />
                     </SelectTrigger>
                     <SelectContent>
                       {services.map((s) => (
@@ -223,7 +223,7 @@ export function CopagoDialog({
               <SubmitButton
                 loading={isPending}
                 loadingText="Registrando…"
-                disabled={!(qty >= 1) || qty > owed || !(unit >= 0)}
+                disabled={!serviceId || !(qty >= 1) || qty > owed || !(unit >= 0)}
               >
                 Registrar
               </SubmitButton>
