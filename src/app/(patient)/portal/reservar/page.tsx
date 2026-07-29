@@ -25,16 +25,14 @@ export default async function BookingPage() {
     // Nunca bloquear la reserva por el mantenimiento de la ventana.
   }
 
-  const [days, services, rehabLibre, schedules] = await Promise.all([
+  const [days, services, restrictedSlugs, schedules] = await Promise.all([
     slotService.getUpcomingDays(),
     serviceService.listActive(),
-    bookingService.puedeReservarRehabLibre(user.id),
+    // Servicios con regla de primer turno que el paciente todavía no cumplió
+    // (asistencia PRESENT). La UI refleja la restricción por servicio elegido.
+    bookingService.getFirstTimeRestrictedSlugs(user.id),
     slotTemplateService.activeScheduleByService(),
   ]);
-
-  // La restricción de horarios de REHAB se mantiene hasta que el paciente
-  // asistió a una sesión (asistencia PRESENT). No afecta a otros servicios.
-  const esPrimerRehab = !rehabLibre;
 
   // Fecha de hoy y último día del mes (default para el "turno fijo").
   const todayKey = toLocalDateKey(new Date());
@@ -53,7 +51,7 @@ export default async function BookingPage() {
       <ReservarTabs
         services={services}
         days={days}
-        esPrimerRehab={esPrimerRehab}
+        restrictedSlugs={restrictedSlugs}
         todayKey={todayKey}
         defaultToDate={defaultToDate}
         schedules={schedules}

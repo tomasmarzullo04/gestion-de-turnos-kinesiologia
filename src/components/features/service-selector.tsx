@@ -37,7 +37,7 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
   recovery: "Recuperación y bienestar",
   respi: "Rehabilitación respiratoria",
   gym: "Entrenamiento funcional",
-  rehab: "Rehabilitación deportiva",
+  rehab: "Kinesiología",
 };
 
 export function ServiceSelector({ services, selectedId, onSelect }: Props) {
@@ -94,10 +94,12 @@ export function ServiceSelector({ services, selectedId, onSelect }: Props) {
               {service.name}
             </span>
 
-            {/* Descripción */}
-            <span className="text-[0.65rem] leading-tight text-muted-foreground text-center">
-              {description}
-            </span>
+            {/* Descripción (se omite si coincide con el nombre para no repetir) */}
+            {description !== service.name && (
+              <span className="text-[0.65rem] leading-tight text-muted-foreground text-center">
+                {description}
+              </span>
+            )}
 
             {/* Capacidad */}
             <span

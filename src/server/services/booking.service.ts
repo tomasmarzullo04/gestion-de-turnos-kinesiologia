@@ -9,10 +9,10 @@ import {
   type Role,
 } from "@/lib/constants";
 import {
-  REHAB_FIRST_TIME_MESSAGE,
-  REHAB_SLUG,
-  isRehabFirstTimeSlotAllowed,
-} from "@/lib/rehab-first-time";
+  FIRST_TIME_RULE_SLUGS,
+  getFirstTimeRule,
+  isFirstTimeSlotAllowed,
+} from "@/lib/first-time-rule";
 import { parseLocalDateKey, toLocalDateKey } from "@/lib/datetime";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -118,25 +118,27 @@ export const bookingService = {
       throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
     }
 
-    // ── Regla acotada: PRIMER turno de REHAB ──────────────────────────────
-    // Solo aplica al servicio REHAB. La restricción de ventana se mantiene
-    // hasta que el paciente ASISTIÓ a una sesión de REHAB (asistencia PRESENT);
-    // ver `puedeReservarRehabLibre`. Mientras no haya un PRESENT, TODA reserva
-    // REHAB nueva debe caer en ventana, sin importar cuántas futuras ya tenga.
-    // Validamos contra el servicio REAL de la franja (no un parámetro que el
-    // cliente podría falsear): el servidor es la verdad; la UI solo refleja.
+    // ── Regla acotada: PRIMER turno del servicio (por servicio) ───────────
+    // Aplica solo a servicios con regla (ver first-time-rule.ts). La restricción
+    // de ventana se mantiene hasta que el paciente ASISTIÓ a una sesión de ESE
+    // servicio (asistencia PRESENT); ver `hasClearedFirstTime`. Mientras no haya
+    // un PRESENT, TODA reserva nueva de ese servicio debe caer en ventana, sin
+    // importar cuántas futuras ya tenga. Validamos contra el servicio REAL de la
+    // franja (no un parámetro que el cliente podría falsear): el servidor es la
+    // verdad; la UI solo refleja.
     //
     // Concurrencia: el estado "libre" solo se activa al marcar asistencia
-    // PRESENT (acción del profesional), nunca desde el flujo de reserva. Por
-    // eso dos reservas REHAB casi simultáneas leen ambas "no libre" → ambas
-    // quedan limitadas a la ventana y ninguna fuera de ventana puede colarse.
-    if (slot.service_slug === REHAB_SLUG && slot.service_id) {
-      const libre = await this.puedeReservarRehabLibre(userId);
+    // PRESENT (acción del profesional), nunca desde el flujo de reserva. Por eso
+    // dos reservas casi simultáneas leen ambas "no libre" → ambas quedan
+    // limitadas a la ventana y ninguna fuera de ventana puede colarse.
+    const rule = getFirstTimeRule(slot.service_slug);
+    if (rule && slot.service_id) {
+      const cleared = await this.hasClearedFirstTime(userId, rule.slug);
       if (
-        !libre &&
-        !isRehabFirstTimeSlotAllowed(slot.day_of_week, slot.start_hour)
+        !cleared &&
+        !isFirstTimeSlotAllowed(rule, slot.day_of_week, slot.start_hour)
       ) {
-        throw new BusinessError(REHAB_FIRST_TIME_MESSAGE);
+        throw new BusinessError(rule.message);
       }
     }
 
@@ -224,11 +226,12 @@ export const bookingService = {
       throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
     }
 
-    // Regla del primer REHAB (se respeta incluso en sobrecupo).
-    if (slot.service_slug === REHAB_SLUG && slot.service_id) {
-      const libre = await this.puedeReservarRehabLibre(userId);
-      if (!libre && !isRehabFirstTimeSlotAllowed(slot.dow, slot.hour)) {
-        throw new BusinessError(REHAB_FIRST_TIME_MESSAGE);
+    // Regla del primer turno del servicio (se respeta incluso en sobrecupo).
+    const rule = getFirstTimeRule(slot.service_slug);
+    if (rule && slot.service_id) {
+      const cleared = await this.hasClearedFirstTime(userId, rule.slug);
+      if (!cleared && !isFirstTimeSlotAllowed(rule, slot.dow, slot.hour)) {
+        throw new BusinessError(rule.message);
       }
     }
 
@@ -462,30 +465,40 @@ export const bookingService = {
   },
 
   /**
-   * ¿El paciente puede reservar REHAB SIN restricción de horarios?
+   * ¿El paciente ya CUMPLIÓ el primer turno de un servicio (Opción B)?
    *
-   * Criterio (Opción B, confirmado por el negocio): la restricción del primer
-   * turno se levanta SOLO cuando el paciente YA ASISTIÓ a una sesión de REHAB,
-   * es decir, cuando existe una reserva REHAB suya con asistencia PRESENT.
+   * La restricción de ventana se levanta SOLO cuando existe una reserva de ESE
+   * servicio con asistencia PRESENT. Tener reservas futuras NO alcanza: hasta
+   * que haya un PRESENT, toda reserva nueva del servicio debe caer en ventana.
    *
-   * Tener reservas REHAB futuras NO alcanza: una reserva no cumplida no
-   * significa que ya hizo su primera sesión. Hasta que haya un PRESENT, TODA
-   * reserva REHAB nueva debe caer en ventana permitida.
-   *
-   * Es la ÚNICA fuente de verdad: la usan tanto la UI como el servidor.
+   * Fuente de verdad única: la usan la UI y el servidor. Identifica el servicio
+   * por `slug` (estable), nunca por nombre.
    */
-  async puedeReservarRehabLibre(userId: string): Promise<boolean> {
+  async hasClearedFirstTime(userId: string, slug: string): Promise<boolean> {
     const rows = await prisma.$queryRaw<{ ok: boolean }[]>`
       SELECT EXISTS (
         SELECT 1
         FROM bookings b
         JOIN attendances a ON a.booking_id = b.id
         WHERE b.user_id = ${userId}::text
-          AND b.service_id = (SELECT id FROM services WHERE slug = ${REHAB_SLUG})
+          AND b.service_id = (SELECT id FROM services WHERE slug = ${slug})
           AND a.status = 'PRESENT'
       ) AS ok
     `;
     return rows[0]?.ok ?? false;
+  },
+
+  /**
+   * Slugs con regla de primer turno que el paciente TODAVÍA no cumplió (sigue
+   * restringido a ventana). Para que la UI refleje la restricción por servicio.
+   */
+  async getFirstTimeRestrictedSlugs(userId: string): Promise<string[]> {
+    const restricted: string[] = [];
+    for (const slug of FIRST_TIME_RULE_SLUGS) {
+      const cleared = await this.hasClearedFirstTime(userId, slug);
+      if (!cleared) restricted.push(slug);
+    }
+    return restricted;
   },
 
   /** Horarios de inicio disponibles (distintos) de un servicio a futuro. */
@@ -539,12 +552,12 @@ export const bookingService = {
     const maxEnd = addDays(today, 120);
     const lastDate = end > maxEnd ? maxEnd : end;
 
-    // ¿Es REHAB? ¿El paciente está libre de la restricción de ventana?
+    // ¿El servicio tiene regla de primer turno? ¿El paciente ya la cumplió?
     const svc = await prisma.$queryRaw<{ slug: string }[]>`
       SELECT slug FROM services WHERE id = ${serviceId}::uuid
     `;
-    const isRehab = svc[0]?.slug === REHAB_SLUG;
-    const rehabLibre = isRehab ? await this.puedeReservarRehabLibre(userId) : true;
+    const rule = getFirstTimeRule(svc[0]?.slug);
+    const cleared = rule ? await this.hasClearedFirstTime(userId, rule.slug) : true;
 
     const recurrenceId = randomUUID();
     const days = new Set(daysOfWeek);
@@ -574,7 +587,7 @@ export const bookingService = {
         continue;
       }
 
-      if (isRehab && !rehabLibre && !isRehabFirstTimeSlotAllowed(slot.dow, slot.hour)) {
+      if (rule && !cleared && !isFirstTimeSlotAllowed(rule, slot.dow, slot.hour)) {
         results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "rehab_window" });
         continue;
       }

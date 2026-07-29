@@ -33,11 +33,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate, parseLocalDateKey } from "@/lib/datetime";
 import {
-  REHAB_FIRST_TIME_EMPTY,
-  REHAB_SLUG,
-  isRehabFirstTimeDayAllowed,
-  isRehabFirstTimeSlotAllowed,
-} from "@/lib/rehab-first-time";
+  getFirstTimeRule,
+  isFirstTimeDayAllowed,
+  isFirstTimeSlotAllowed,
+} from "@/lib/first-time-rule";
 import { cn } from "@/lib/utils";
 import {
   ServiceScheduleHint,
@@ -51,8 +50,8 @@ interface Props {
   days: DayAvailability[];
   initialDate: string | null;
   initialSlots: SlotView[];
-  /** El paciente nunca tuvo un turno de REHAB confirmado → aplica la ventana. */
-  esPrimerRehab: boolean;
+  /** Slugs con regla de primer turno que el paciente aún no cumplió. */
+  restrictedSlugs: string[];
   /** Patrón semanal por servicio (id → días/horarios/cupos) para el cartel. */
   schedules: Record<string, ScheduleEntry[]>;
 }
@@ -81,7 +80,7 @@ const StepHeader = React.memo(function StepHeader({
   );
 });
 
-export function BookingFlow({ services, days: initialDays, initialDate, initialSlots, esPrimerRehab, schedules }: Props) {
+export function BookingFlow({ services, days: initialDays, initialDate, initialSlots, restrictedSlugs, schedules }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
@@ -106,37 +105,35 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
   // Cupos en vivo (Realtime).
   useRealtimeSlots(selectedDate, setSlots);
 
-  // La restricción de horarios aplica SOLO al primer turno de REHAB: cuando el
-  // servicio elegido es REHAB y el paciente nunca tuvo uno confirmado. Cualquier
-  // otro servicio (o un REHAB que no sea el primero) no tiene restricción.
-  const restrictRehab =
-    Boolean(selectedService) &&
-    selectedService!.slug === REHAB_SLUG &&
-    esPrimerRehab;
+  // Regla de primer turno del servicio elegido, SÓLO si el paciente aún no la
+  // cumplió (su slug está en restrictedSlugs). Cualquier servicio sin regla, o
+  // ya cumplida, no tiene restricción. `getFirstTimeRule` devuelve una
+  // referencia estable, así que sirve como dependencia de los useMemo.
+  const firstTimeRule =
+    selectedService && restrictedSlugs.includes(selectedService.slug)
+      ? getFirstTimeRule(selectedService.slug)
+      : null;
 
-  // ── Filtrado de días por la ventana del primer REHAB ───────────────────
+  // ── Filtrado de días por la ventana del primer turno ───────────────────
   const filteredDays = React.useMemo(() => {
-    if (!restrictRehab) return days;
-    return days.filter((day) => {
-      const d = parseLocalDateKey(day.date);
-      return isRehabFirstTimeDayAllowed(d.getDay());
-    });
-  }, [days, restrictRehab]);
+    if (!firstTimeRule) return days;
+    return days.filter((day) =>
+      isFirstTimeDayAllowed(firstTimeRule, parseLocalDateKey(day.date).getDay()),
+    );
+  }, [days, firstTimeRule]);
 
-  // ── Filtrado de slots por la ventana del primer REHAB ──────────────────
+  // ── Filtrado de slots por la ventana del primer turno ──────────────────
   const filteredSlots = React.useMemo(() => {
-    if (!restrictRehab || !selectedDate) return slots;
-    const d = parseLocalDateKey(selectedDate);
-    const dayOfWeek = d.getDay();
+    if (!firstTimeRule || !selectedDate) return slots;
+    const dayOfWeek = parseLocalDateKey(selectedDate).getDay();
     return slots.map((slot) => {
       const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
-      const allowed = isRehabFirstTimeSlotAllowed(dayOfWeek, hour);
-      if (!allowed) {
+      if (!isFirstTimeSlotAllowed(firstTimeRule, dayOfWeek, hour)) {
         return { ...slot, available: false, isBlocked: true };
       }
       return slot;
     });
-  }, [slots, restrictRehab, selectedDate]);
+  }, [slots, firstTimeRule, selectedDate]);
 
   // ── Fetch de días cuando cambia el servicio ────────────────────────────
   const fetchDays = React.useCallback(async (serviceId: string) => {
@@ -315,19 +312,16 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
 
   return (
     <div className="space-y-4">
-      {/* Banner del primer turno de REHAB (solo si aplica la ventana) */}
-      {restrictRehab && (
+      {/* Banner del primer turno del servicio (solo si aplica la ventana) */}
+      {firstTimeRule && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-950/30">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
             <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-              Tu primer turno de rehabilitación
+              Tu primer turno
             </p>
             <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
-              Debe ser <strong>lunes a la tarde</strong>,{" "}
-              <strong>miércoles</strong> (todo el día) o{" "}
-              <strong>viernes a la mañana</strong>. A partir del segundo turno no
-              hay restricción.
+              {firstTimeRule.message} A partir del segundo turno no hay restricción.
             </p>
           </div>
         </div>
@@ -346,7 +340,7 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
             <ServiceScheduleHint
               serviceName={selectedService.name}
               entries={schedules[selectedService.id] ?? []}
-              restrictRehab={restrictRehab}
+              firstTimeNote={firstTimeRule?.message ?? null}
             />
           )}
         </CardContent>
@@ -364,8 +358,8 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
             </div>
           ) : filteredDays.length === 0 ? (
             <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              {restrictRehab
-                ? REHAB_FIRST_TIME_EMPTY
+              {firstTimeRule
+                ? firstTimeRule.emptyMessage
                 : "No hay días disponibles para este servicio."}
             </p>
           ) : (
@@ -430,12 +424,12 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
       <Card className={cn("transition-opacity duration-300", !selectedDate && "opacity-55")}>
         <CardContent className="space-y-4 p-5 sm:p-6">
           <StepHeader step={3} title="Elegí el horario" done={Boolean(selectedSlot)} />
-          {restrictRehab && selectedDate && (
+          {firstTimeRule && selectedDate && (
             <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5" />
               <span>
-                Para tu primer turno de rehabilitación, los horarios fuera de la
-                ventana permitida están deshabilitados.
+                Para tu primer turno, los horarios fuera de la ventana permitida
+                están deshabilitados.
               </span>
             </div>
           )}
