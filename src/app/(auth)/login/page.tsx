@@ -37,8 +37,16 @@ export default async function LoginPage({
           </CardDescription>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         <LoginForm callbackUrl={callbackUrl} />
+        <div className="text-right">
+          <Link
+            href="/forgot-password"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
       </CardContent>
       <CardFooter className="justify-center text-sm text-muted-foreground pb-8">
         ¿No tenés cuenta?&nbsp;
