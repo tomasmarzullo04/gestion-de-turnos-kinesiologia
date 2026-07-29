@@ -3,6 +3,13 @@ import { z } from "zod";
 /** Edición completa del paciente (datos personales + cobertura). */
 export const editPatientSchema = z.object({
   name: z.string().trim().min(1, "Ingresá el nombre").max(120, "Nombre demasiado largo"),
+  apellido: z
+    .string()
+    .trim()
+    .max(120, "Apellido demasiado largo")
+    .optional()
+    .or(z.literal(""))
+    .nullable(),
   email: z.string().trim().toLowerCase().email("Email inválido"),
   phone: z
     .string()

@@ -338,6 +338,34 @@ export const bookingService = {
     }
   },
 
+  /**
+   * Reservas CONFIRMADAS de un paciente en una fecha concreta. Sirve para avisar
+   * que ya tiene un turno ese día (posible duplicado) antes de sacar otro.
+   */
+  async getSameDayBookings(userId: string, dateKey: string): Promise<SameDayBooking[]> {
+    const rows = await prisma.$queryRaw<
+      { id: string; start_time: string; end_time: string; service_name: string | null }[]
+    >`
+      SELECT b.id,
+             to_char(s.start_time, 'HH24:MI') AS start_time,
+             to_char(s.end_time, 'HH24:MI') AS end_time,
+             sv.name AS service_name
+      FROM bookings b
+      JOIN slots s ON s.id = b.slot_id
+      LEFT JOIN services sv ON sv.id = b.service_id
+      WHERE b.user_id = ${userId}::text
+        AND b.status = 'CONFIRMED'
+        AND s.date = ${dateKey}::date
+      ORDER BY s.start_time
+    `;
+    return rows.map((r) => ({
+      bookingId: r.id,
+      startTime: r.start_time,
+      endTime: r.end_time,
+      serviceName: r.service_name,
+    }));
+  },
+
   /** Reservas de un paciente (próximas e históricas), listo para mostrar. */
   async listForUser(userId: string): Promise<MyBooking[]> {
     const rows = await prisma.$queryRaw<
@@ -570,6 +598,13 @@ export type SeriesItemStatus =
   | "already"
   | "rehab_window"
   | "error";
+
+export interface SameDayBooking {
+  bookingId: string;
+  startTime: string;
+  endTime: string;
+  serviceName: string | null;
+}
 
 export interface SeriesItemResult {
   date: string;

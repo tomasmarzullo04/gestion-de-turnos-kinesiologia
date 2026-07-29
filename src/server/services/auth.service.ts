@@ -3,6 +3,7 @@ import { hash } from "bcryptjs";
 import { ROLES } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { userRepository } from "@/server/repositories/user.repository";
+import { patientService } from "@/server/services/patient.service";
 import { type RegisterInput } from "@/lib/validations/auth";
 
 const SALT_ROUNDS = 12;
@@ -39,6 +40,9 @@ export const authService = {
       montoCopago: input.montoCopago ?? null,
       esPrimeraVez: input.esPrimeraVez,
     });
+
+    // Apellido para ordenar (derivado del nombre; best-effort).
+    await patientService.setApellido(user.id, input.name);
 
     logger.info("Nuevo paciente registrado", { userId: user.id });
 

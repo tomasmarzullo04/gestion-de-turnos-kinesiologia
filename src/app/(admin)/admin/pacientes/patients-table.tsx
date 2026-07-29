@@ -68,6 +68,7 @@ import { type MyBooking } from "@/server/services/booking.service";
 interface PatientRow {
   id: string;
   name: string;
+  apellido: string | null;
   email: string;
   phone: string | null;
   archived: boolean;
@@ -114,6 +115,7 @@ export function PatientsTable({
 
   // Form state para editar paciente
   const [nombre, setNombre] = React.useState("");
+  const [apellido, setApellido] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [telefono, setTelefono] = React.useState("");
   const [cobertura, setCobertura] = React.useState<string>("PARTICULAR");
@@ -126,6 +128,7 @@ export function PatientsTable({
     setSelected(patient);
     setTab(initialTab);
     setNombre(patient.name);
+    setApellido(patient.apellido ?? "");
     setEmail(patient.email);
     setTelefono(patient.phone ?? "");
     setCobertura(patient.tipoCoberturaString ?? "PARTICULAR");
@@ -148,6 +151,7 @@ export function PatientsTable({
     startTransition(async () => {
       const result = await updatePatientAction(selected.id, {
         name: nombre,
+        apellido,
         email,
         phone: telefono,
         tipoCoberturaString: cobertura,
@@ -354,9 +358,19 @@ export function PatientsTable({
 
             <TabsContent value="datos">
               <form onSubmit={handleSavePatient} className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto p-1">
-                <div className="space-y-2">
-                  <Label>Nombre</Label>
-                  <Input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Nombre completo</Label>
+                    <Input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Apellido (para ordenar)</Label>
+                    <Input
+                      value={apellido}
+                      onChange={(e) => setApellido(e.target.value)}
+                      placeholder="Se deriva del nombre"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

@@ -76,8 +76,12 @@ model User {
   mustChangePassword    Boolean   @default(false) @map("must_change_password")
   createdBy             String?   @map("created_by")
 
+  // ── Orden por apellido (editable; derivado del nombre por defecto) ───────
+  apellido              String?
+
   @@index([role])
   @@index([archivedAt])
+  @@index([apellido])
 }
 
 /// Profesional del estudio.

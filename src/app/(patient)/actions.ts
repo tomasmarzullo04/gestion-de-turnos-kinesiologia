@@ -22,6 +22,7 @@ import { onboardingSchema } from "@/lib/validations/admin-booking";
 import { emitEvent } from "@/server/events/emitter";
 import {
   bookingService,
+  type SameDayBooking,
   type SeriesResult,
 } from "@/server/services/booking.service";
 import { patientService } from "@/server/services/patient.service";
@@ -104,6 +105,20 @@ export async function bookSlotAction(input: unknown): Promise<ActionResult<{ isF
     return ok({
       isFirstTime: booking.isFirstTime,
     });
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Turnos que el paciente ya tiene ese día (para avisar posible duplicado). */
+export async function getMySameDayBookingsAction(
+  date: string,
+): Promise<ActionResult<SameDayBooking[]>> {
+  try {
+    const user = await assertRole(ROLES.PATIENT);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Fecha inválida");
+    const list = await bookingService.getSameDayBookings(user.id, date);
+    return ok(list);
   } catch (error) {
     return fromError(error);
   }

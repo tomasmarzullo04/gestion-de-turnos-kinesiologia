@@ -4,6 +4,7 @@ import { hash } from "bcryptjs";
 
 import { TIMEZONE, ROLES } from "@/lib/constants";
 import { prisma } from "@/lib/db";
+import { apellidoSortKey, deriveApellido } from "@/lib/names";
 import { BusinessError } from "@/server/errors";
 
 const SALT_ROUNDS = 12;
@@ -30,6 +31,7 @@ function generateTempPassword(): string {
 export interface PatientRow {
   id: string;
   name: string;
+  apellido: string | null;
   email: string;
   phone: string | null;
   archived: boolean;
@@ -136,9 +138,22 @@ export const patientService = {
       paidMap = new Map();
     }
 
-    return patients.map((p) => ({
+    // Apellido por paciente. Resiliente: si la columna aún no existe (migración
+    // pendiente), degradamos a apellido derivado del nombre (última palabra).
+    let apellidoMap = new Map<string, string>();
+    try {
+      const rows = await prisma.$queryRaw<{ id: string; apellido: string | null }[]>`
+        SELECT id, apellido FROM "User" WHERE role = 'PATIENT' AND apellido IS NOT NULL
+      `;
+      apellidoMap = new Map(rows.filter((r) => r.apellido).map((r) => [r.id, r.apellido!]));
+    } catch {
+      apellidoMap = new Map();
+    }
+
+    const result = patients.map((p) => ({
       id: p.id,
       name: p.name,
+      apellido: apellidoMap.get(p.id) ?? null,
       email: p.email,
       phone: p.phone,
       archived: archivedSet.has(p.id),
@@ -155,6 +170,13 @@ export const patientService = {
       tratamientoInicio: p.tratamientoInicio?.toISOString() ?? null,
       tratamientoFin: p.tratamientoFin?.toISOString() ?? null,
     }));
+
+    // Orden por apellido (A→Z), con desempate por nombre completo.
+    return result.sort((a, b) => {
+      const ka = apellidoSortKey(a.name, a.apellido);
+      const kb = apellidoSortKey(b.name, b.apellido);
+      return ka.localeCompare(kb, "es") || a.name.localeCompare(b.name, "es");
+    });
   },
 
   /** Lista mínima de pacientes (id + nombre), para selects. */
@@ -174,6 +196,7 @@ export const patientService = {
     userId: string,
     data: {
       name: string;
+      apellido?: string | null;
       email: string;
       phone?: string | null;
       tipoCoberturaString?: string | null;
@@ -207,13 +230,26 @@ export const patientService = {
       },
     });
 
-    // Auditoría best-effort: si la columna aún no existe, no rompe la edición.
+    // Auditoría + apellido (best-effort: si las columnas aún no existen, no
+    // rompe la edición). El apellido usa el explícito o, si no, el derivado.
+    const apellido =
+      data.apellido && data.apellido.trim() ? data.apellido.trim() : deriveApellido(data.name);
     try {
       await prisma.$executeRaw`
-        UPDATE "User" SET updated_by = ${editorId} WHERE id = ${userId}
+        UPDATE "User" SET updated_by = ${editorId}, apellido = ${apellido} WHERE id = ${userId}
       `;
     } catch {
-      /* columna updated_by pendiente de migración */
+      /* columnas updated_by/apellido pendientes de migración */
+    }
+  },
+
+  /** Setea el apellido (best-effort). Deriva de `name` si no se pasa explícito. */
+  async setApellido(userId: string, name: string, apellido?: string | null): Promise<void> {
+    const value = apellido && apellido.trim() ? apellido.trim() : deriveApellido(name);
+    try {
+      await prisma.$executeRaw`UPDATE "User" SET apellido = ${value} WHERE id = ${userId}`;
+    } catch {
+      /* columna apellido pendiente de migración */
     }
   },
 
@@ -364,6 +400,7 @@ export const patientService = {
       select: { id: true },
     });
 
+    await this.setApellido(user.id, data.name);
     return { userId: user.id, tempPassword };
   },
 
@@ -418,6 +455,7 @@ export const patientService = {
         mustChangePassword: false,
       },
     });
+    await this.setApellido(userId, data.name);
   },
 
   /** Obtener datos de primera vez / cobertura de un usuario (para el booking flow). */

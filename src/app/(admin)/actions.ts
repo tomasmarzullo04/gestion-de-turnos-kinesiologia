@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { fromError, ok } from "@/lib/action-result";
+import { fail, fromError, ok } from "@/lib/action-result";
 import { assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
 import { logger } from "@/lib/logger";
@@ -24,7 +24,11 @@ import {
 } from "@/lib/validations/payment";
 import { paymentService } from "@/server/services/payment.service";
 import { attendanceService } from "@/server/services/attendance.service";
-import { bookingService, type MyBooking } from "@/server/services/booking.service";
+import {
+  bookingService,
+  type MyBooking,
+  type SameDayBooking,
+} from "@/server/services/booking.service";
 import { generationService } from "@/server/services/generation.service";
 import { patientService } from "@/server/services/patient.service";
 import { professionalService } from "@/server/services/professional.service";
@@ -268,6 +272,21 @@ export async function reactivatePatientAction(
     await patientService.reactivatePatient(userId);
     revalidatePath("/admin/pacientes");
     return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Turnos que un paciente ya tiene ese día (aviso de posible duplicado). */
+export async function getPatientSameDayBookingsAction(
+  userId: string,
+  date: string,
+): Promise<ActionResult<SameDayBooking[]>> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Fecha inválida");
+    const list = await bookingService.getSameDayBookings(userId, date);
+    return ok(list);
   } catch (error) {
     return fromError(error);
   }

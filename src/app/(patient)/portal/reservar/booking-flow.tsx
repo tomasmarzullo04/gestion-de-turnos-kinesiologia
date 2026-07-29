@@ -14,7 +14,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { bookSlotAction } from "@/app/(patient)/actions";
+import {
+  bookSlotAction,
+  cancelBookingAction,
+  getMySameDayBookingsAction,
+} from "@/app/(patient)/actions";
+import { SameDayWarning } from "@/components/features/same-day-warning";
 import { SlotGrid } from "@/components/features/slot-grid";
 import {
   ServiceSelector,
@@ -26,7 +31,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { parseLocalDateKey } from "@/lib/datetime";
+import { formatDate, parseLocalDateKey } from "@/lib/datetime";
 import {
   REHAB_FIRST_TIME_EMPTY,
   REHAB_SLUG,
@@ -38,6 +43,7 @@ import {
   ServiceScheduleHint,
   type ScheduleEntry,
 } from "@/app/(patient)/portal/reservar/service-schedule-hint";
+import { type SameDayBooking } from "@/server/services/booking.service";
 import { type DayAvailability, type SlotView } from "@/server/services/slot.service";
 
 interface Props {
@@ -87,6 +93,8 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
   const [loadingSlots, setLoadingSlots] = React.useState(false);
   const [selectedSlot, setSelectedSlot] = React.useState<SlotView | null>(null);
   const [notes, setNotes] = React.useState("");
+  const [sameDay, setSameDay] = React.useState<SameDayBooking[]>([]);
+  const [cancellingSameDay, setCancellingSameDay] = React.useState(false);
 
   // Caché en memoria de las franjas por día ya consultado.
   const cacheRef = React.useRef<Map<string, SlotView[]>>(new Map());
@@ -251,6 +259,44 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
     });
   }, [selectedSlot, selectedService, notes, router, fetchSlots]);
 
+  // Aviso de turno duplicado ese día: al elegir una fecha, consultamos si el
+  // paciente ya tiene un turno confirmado ese día.
+  React.useEffect(() => {
+    if (!selectedDate) {
+      setSameDay([]);
+      return;
+    }
+    let active = true;
+    void getMySameDayBookingsAction(selectedDate).then((res) => {
+      if (active && res.success) setSameDay(res.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedDate]);
+
+  const handleCancelSameDay = React.useCallback(
+    (bookingId: string) => {
+      setCancellingSameDay(true);
+      void cancelBookingAction({ bookingId }).then((res) => {
+        if (res.success) {
+          toast.success("Turno anterior cancelado. Liberaste ese cupo.");
+          const cur = selectedDateRef.current;
+          if (cur) {
+            void getMySameDayBookingsAction(cur).then((r) => {
+              if (r.success) setSameDay(r.data);
+            });
+            void fetchSlots(cur, true);
+          }
+        } else {
+          toast.error(res.error);
+        }
+        setCancellingSameDay(false);
+      });
+    },
+    [fetchSlots],
+  );
+
   if (services.length === 0) {
     return (
       <Card>
@@ -369,6 +415,16 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
           )}
         </CardContent>
       </Card>
+
+      {/* Aviso: ya tiene un turno ese día */}
+      {selectedDate && sameDay.length > 0 && (
+        <SameDayWarning
+          title={`Ya tenés un turno el ${formatDate(parseLocalDateKey(selectedDate))}`}
+          bookings={sameDay}
+          onCancel={handleCancelSameDay}
+          cancelling={cancellingSameDay}
+        />
+      )}
 
       {/* Paso 3 — Horario */}
       <Card className={cn("transition-opacity duration-300", !selectedDate && "opacity-55")}>

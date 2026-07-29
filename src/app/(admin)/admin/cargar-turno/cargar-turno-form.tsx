@@ -6,8 +6,11 @@ import { toast } from "sonner";
 
 import {
   adminBookAction,
+  adminCancelBookingAction,
   adminCreatePatientAction,
+  getPatientSameDayBookingsAction,
 } from "@/app/(admin)/actions";
+import { SameDayWarning } from "@/components/features/same-day-warning";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { SubmitButton } from "@/components/shared/submit-button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +36,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { type SameDayBooking } from "@/server/services/booking.service";
 import { type SlotView } from "@/server/services/slot.service";
 
 interface Patient {
@@ -57,6 +62,8 @@ export function CargarTurnoForm({ patients: initialPatients, services, todayKey 
   const [notes, setNotes] = React.useState("");
   const [confirmOverride, setConfirmOverride] = React.useState(false);
   const [newOpen, setNewOpen] = React.useState(false);
+  const [sameDay, setSameDay] = React.useState<SameDayBooking[]>([]);
+  const [cancellingSameDay, setCancellingSameDay] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
 
   const fetchSlots = React.useCallback(async (d: string, svc: string) => {
@@ -81,6 +88,35 @@ export function CargarTurnoForm({ patients: initialPatients, services, todayKey 
     else setSlots([]);
   }, [serviceId, date, fetchSlots]);
 
+  // Aviso de turno duplicado: si el paciente ya tiene turno ese día.
+  const refreshSameDay = React.useCallback((uid: string, d: string) => {
+    if (!uid || !d) {
+      setSameDay([]);
+      return;
+    }
+    void getPatientSameDayBookingsAction(uid, d).then((res) => {
+      setSameDay(res.success ? res.data : []);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    refreshSameDay(userId, date);
+  }, [userId, date, refreshSameDay]);
+
+  function handleCancelSameDay(bookingId: string) {
+    setCancellingSameDay(true);
+    void adminCancelBookingAction({ bookingId }).then((res) => {
+      if (res.success) {
+        toast.success("Turno anterior cancelado.");
+        refreshSameDay(userId, date);
+        void fetchSlots(date, serviceId);
+      } else {
+        toast.error(res.error);
+      }
+      setCancellingSameDay(false);
+    });
+  }
+
   function doBook(override: boolean) {
     if (!userId || !selected) return;
     startTransition(async () => {
@@ -99,6 +135,7 @@ export function CargarTurnoForm({ patients: initialPatients, services, todayKey 
         setSelected(null);
         setNotes("");
         void fetchSlots(date, serviceId);
+        refreshSameDay(userId, date);
       } else {
         toast.error(result.error);
       }
@@ -222,6 +259,16 @@ export function CargarTurnoForm({ patients: initialPatients, services, todayKey 
               </div>
             )}
           </div>
+
+          {/* Aviso: el paciente ya tiene un turno ese día */}
+          {userId && sameDay.length > 0 && (
+            <SameDayWarning
+              title={`Este paciente ya tiene un turno el ${formatDate(parseLocalDateKey(date))}`}
+              bookings={sameDay}
+              onCancel={handleCancelSameDay}
+              cancelling={cancellingSameDay}
+            />
+          )}
 
           {/* Notas */}
           <div className="space-y-2">
