@@ -100,11 +100,13 @@ export function PatientsTable({
   copagoAmount,
   todayKey,
   view,
+  services,
 }: {
   patients: PatientRow[];
   copagoAmount: number;
   todayKey: string;
   view: "active" | "archived";
+  services?: { id: string; name: string }[];
 }) {
   const [selected, setSelected] = React.useState<PatientRow | null>(null);
   const [tab, setTab] = React.useState("turnos");
@@ -455,6 +457,7 @@ export function PatientsTable({
         patient={copagoFor}
         copagoAmount={copagoAmount}
         todayKey={todayKey}
+        services={services}
       />
 
       <DeletePatientDialog

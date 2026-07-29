@@ -23,6 +23,14 @@ export interface PaymentMovement {
   concept: string | null;
   paidAt: string; // "YYYY-MM-DD"
   patientName: string | null;
+  serviceName: string | null;
+}
+
+export interface ServiceRevenue {
+  serviceId: string | null;
+  serviceName: string;
+  serviceColor: string;
+  total: number;
 }
 
 export interface MonthlySummary {
@@ -33,6 +41,7 @@ export interface MonthlySummary {
   payers: number;
   prevTotal: number;
   movements: PaymentMovement[];
+  revenueByService: ServiceRevenue[];
 }
 
 export const paymentService = {
@@ -69,15 +78,17 @@ export const paymentService = {
     unitAmount: number;
     paidAt: string;
     recordedById: string;
+    serviceId?: string;
   }): Promise<void> {
     const total = input.quantity * input.unitAmount;
     const [y, m] = input.paidAt.split("-").map(Number);
+    const sid = input.serviceId ?? null;
     await prisma.$executeRaw`
       INSERT INTO payments
-        (user_id, type, amount, quantity, period_month, period_year, paid_at, recorded_by_id)
+        (user_id, type, amount, quantity, period_month, period_year, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'COPAGO', ${total}, ${input.quantity},
-         ${m}, ${y}, ${input.paidAt}::date, ${input.recordedById})
+         ${m}, ${y}, ${input.paidAt}::date, ${input.recordedById}, ${sid}::uuid)
     `;
   },
 
@@ -88,14 +99,16 @@ export const paymentService = {
     concept: string;
     paidAt: string;
     recordedById: string;
+    serviceId?: string;
   }): Promise<void> {
     const [y, m] = input.paidAt.split("-").map(Number);
+    const sid = input.serviceId ?? null;
     await prisma.$executeRaw`
       INSERT INTO payments
-        (user_id, type, amount, quantity, period_month, period_year, concept, paid_at, recorded_by_id)
+        (user_id, type, amount, quantity, period_month, period_year, concept, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'EXTRA', ${input.amount}, 1,
-         ${m}, ${y}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById})
+         ${m}, ${y}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById}, ${sid}::uuid)
     `;
   },
 
@@ -124,10 +137,11 @@ export const paymentService = {
       payers: 0,
       prevTotal: 0,
       movements: [],
+      revenueByService: [],
     };
 
     try {
-    const [totals, prevRows, movements] = await Promise.all([
+    const [totals, prevRows, movements, revenueRows] = await Promise.all([
       prisma.$queryRaw<
         {
           total_copagos: number;
@@ -160,15 +174,40 @@ export const paymentService = {
           concept: string | null;
           paid_at: string;
           patient_name: string | null;
+          service_name: string | null;
         }[]
       >`
         SELECT p.id, p.type, p.amount, p.quantity, p.concept,
                to_char(p.paid_at AT TIME ZONE ${TIMEZONE}, 'YYYY-MM-DD') AS paid_at,
-               u.name AS patient_name
+               u.name AS patient_name,
+               sv.name AS service_name
         FROM payments p
         LEFT JOIN "User" u ON u.id = p.user_id
+        LEFT JOIN services sv ON sv.id = p.service_id
         WHERE p.period_year = ${year} AND p.period_month = ${month} AND p.voided_at IS NULL
         ORDER BY p.paid_at DESC, p.recorded_at DESC
+      `,
+      // ── Desglose de ingresos por servicio ────────────────────────────────
+      prisma.$queryRaw<
+        {
+          service_id: string | null;
+          service_name: string;
+          service_color: string;
+          total: number;
+        }[]
+      >`
+        SELECT
+          p.service_id,
+          coalesce(sv.name, 'Sin servicio') AS service_name,
+          coalesce(sv.color, '#94a3b8')     AS service_color,
+          coalesce(sum(p.amount), 0)::int   AS total
+        FROM payments p
+        LEFT JOIN services sv ON sv.id = p.service_id
+        WHERE p.period_year = ${year}
+          AND p.period_month = ${month}
+          AND p.voided_at IS NULL
+        GROUP BY p.service_id, sv.name, sv.color
+        ORDER BY total DESC
       `,
     ]);
 
@@ -188,6 +227,13 @@ export const paymentService = {
         concept: m.concept,
         paidAt: m.paid_at,
         patientName: m.patient_name,
+        serviceName: m.service_name,
+      })),
+      revenueByService: revenueRows.map((r) => ({
+        serviceId: r.service_id,
+        serviceName: r.service_name,
+        serviceColor: r.service_color,
+        total: r.total,
       })),
     };
     } catch (error) {

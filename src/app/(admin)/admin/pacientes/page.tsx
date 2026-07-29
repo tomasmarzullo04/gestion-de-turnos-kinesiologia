@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { toLocalDateKey } from "@/lib/datetime";
 import { patientService } from "@/server/services/patient.service";
 import { paymentService } from "@/server/services/payment.service";
+import { serviceService } from "@/server/services/service.service";
 
 export const metadata: Metadata = { title: "Pacientes" };
 export const dynamic = "force-dynamic";
@@ -17,9 +18,10 @@ export default async function PatientsPage({
   const { view: viewParam } = await searchParams;
   const view = viewParam === "archived" ? "archived" : "active";
 
-  const [list, copagoAmount] = await Promise.all([
+  const [list, copagoAmount, services] = await Promise.all([
     patientService.listWithStats(view === "archived"),
     paymentService.getCopagoAmount(),
+    serviceService.listActive(),
   ]);
 
   // En "archivados" mostramos solo los archivados; en "activos", listWithStats
@@ -39,6 +41,7 @@ export default async function PatientsPage({
         copagoAmount={copagoAmount}
         todayKey={todayKey}
         view={view}
+        services={services.map(s => ({ id: s.id, name: s.name }))}
       />
     </div>
   );

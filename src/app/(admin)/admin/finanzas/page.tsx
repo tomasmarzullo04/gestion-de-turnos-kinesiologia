@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { toLocalDateKey } from "@/lib/datetime";
 import { patientService } from "@/server/services/patient.service";
 import { paymentService } from "@/server/services/payment.service";
+import { serviceService } from "@/server/services/service.service";
 
 export const metadata: Metadata = { title: "Finanzas" };
 export const dynamic = "force-dynamic";
@@ -29,10 +30,11 @@ export default async function FinanzasPage({
   const month = clampMonth(Number(sp.m), Number(mStr));
   const year = clampYear(Number(sp.y), Number(yStr));
 
-  const [summary, copagoAmount, patients] = await Promise.all([
+  const [summary, copagoAmount, patients, services] = await Promise.all([
     paymentService.getMonthlySummary(month, year),
     paymentService.getCopagoAmount(),
     patientService.listBasic(),
+    serviceService.listActive(),
   ]);
 
   return (
@@ -48,6 +50,7 @@ export default async function FinanzasPage({
         copagoAmount={copagoAmount}
         patients={patients}
         todayKey={todayKey}
+        services={services.map((s) => ({ id: s.id, name: s.name }))}
       />
     </div>
   );

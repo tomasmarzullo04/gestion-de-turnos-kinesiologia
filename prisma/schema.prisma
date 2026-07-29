@@ -36,6 +36,7 @@ model Service {
   templates             SlotTemplate[]
   slots                 Slot[]
   bookings              Booking[]
+  payments              Payment[]
   professionalServices  ProfessionalService[]
 
   @@map("services")
@@ -190,9 +191,14 @@ model Payment {
   voidedById   String?   @map("voided_by_id")
   voidReason   String?   @map("void_reason")
 
+  // ── Vínculo a servicio (para desglose de ingresos por servicio) ──────────
+  serviceId    String?   @map("service_id") @db.Uuid
+  service      Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@index([periodYear, periodMonth])
   @@index([type])
+  @@index([serviceId])
   @@map("payments")
 }
 

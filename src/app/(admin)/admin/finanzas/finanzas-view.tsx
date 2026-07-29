@@ -52,7 +52,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatARS, monthName, shiftMonth } from "@/lib/money";
-import { type MonthlySummary, type PaymentMovement } from "@/server/services/payment.service";
+import { type MonthlySummary, type PaymentMovement, type ServiceRevenue } from "@/server/services/payment.service";
+
+interface ServiceOption {
+  id: string;
+  name: string;
+}
 
 interface Props {
   month: number;
@@ -61,6 +66,7 @@ interface Props {
   copagoAmount: number;
   patients: { id: string; name: string }[];
   todayKey: string;
+  services: ServiceOption[];
 }
 
 export function FinanzasView({
@@ -70,6 +76,7 @@ export function FinanzasView({
   copagoAmount,
   patients,
   todayKey,
+  services,
 }: Props) {
   const [extraOpen, setExtraOpen] = React.useState(false);
   const [amountOpen, setAmountOpen] = React.useState(false);
@@ -143,6 +150,9 @@ export function FinanzasView({
         />
       </div>
 
+      {/* Ingresos por servicio */}
+      <RevenueByServiceSection data={summary.revenueByService} total={summary.total} />
+
       {/* Movimientos del mes */}
       <div className="rounded-xl border">
         <div className="border-b px-4 py-3 text-sm font-medium">
@@ -174,14 +184,21 @@ export function FinanzasView({
                     <TableCell className="font-medium">{m.patientName ?? "—"}</TableCell>
                     <TableCell>
                       {m.type === "COPAGO" ? (
-                        <Badge variant="secondary">
-                          Copago{m.quantity > 1 ? ` ×${m.quantity}` : ""}
-                        </Badge>
+                        <div className="flex flex-col gap-0.5">
+                          <Badge variant="secondary">
+                            Copago{m.quantity > 1 ? ` ×${m.quantity}` : ""}
+                          </Badge>
+                          {m.serviceName && (
+                            <span className="text-xs text-muted-foreground">{m.serviceName}</span>
+                          )}
+                        </div>
                       ) : (
                         <div className="flex flex-col">
                           <Badge variant="outline" className="w-fit">Extra</Badge>
-                          {m.concept && (
-                            <span className="mt-0.5 text-xs text-muted-foreground">{m.concept}</span>
+                          {(m.concept || m.serviceName) && (
+                            <span className="mt-0.5 text-xs text-muted-foreground">
+                              {[m.serviceName, m.concept].filter(Boolean).join(" · ")}
+                            </span>
                           )}
                         </div>
                       )}
@@ -216,6 +233,7 @@ export function FinanzasView({
         onOpenChange={setExtraOpen}
         patients={patients}
         todayKey={todayKey}
+        services={services}
       />
       <CopagoAmountDialog
         open={amountOpen}
@@ -240,23 +258,83 @@ export function FinanzasView({
   );
 }
 
+// ── Ingresos por servicio ────────────────────────────────────────────────────
+function RevenueByServiceSection({
+  data,
+  total,
+}: {
+  data: ServiceRevenue[];
+  total: number;
+}) {
+  if (data.length === 0) return null;
+
+  const maxTotal = Math.max(...data.map((d) => d.total), 1);
+
+  return (
+    <div className="rounded-xl border">
+      <div className="border-b px-4 py-3 text-sm font-medium">
+        Ingresos por servicio
+      </div>
+      <div className="space-y-3 p-4">
+        {data.map((item) => {
+          const pct = total > 0 ? ((item.total / total) * 100) : 0;
+          const barWidth = (item.total / maxTotal) * 100;
+
+          return (
+            <div key={item.serviceId ?? "__none"} className="space-y-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-block h-3 w-3 rounded-full shrink-0"
+                    style={{ backgroundColor: item.serviceColor }}
+                    aria-hidden
+                  />
+                  <span className="font-medium">{item.serviceName}</span>
+                </div>
+                <div className="flex items-center gap-3 tabular-nums">
+                  <span className="text-muted-foreground text-xs">
+                    {pct.toFixed(1)}%
+                  </span>
+                  <span className="font-semibold">{formatARS(item.total)}</span>
+                </div>
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted">
+                <div
+                  className="h-2 rounded-full transition-all duration-500 ease-out"
+                  style={{
+                    width: `${barWidth}%`,
+                    backgroundColor: item.serviceColor,
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Registrar cobro extra ────────────────────────────────────────────────────
 function ExtraDialog({
   open,
   onOpenChange,
   patients,
   todayKey,
+  services,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   patients: { id: string; name: string }[];
   todayKey: string;
+  services: ServiceOption[];
 }) {
   const [isPending, startTransition] = React.useTransition();
   const [userId, setUserId] = React.useState("");
   const [concept, setConcept] = React.useState("");
   const [amount, setAmount] = React.useState(0);
   const [paidAt, setPaidAt] = React.useState(todayKey);
+  const [serviceId, setServiceId] = React.useState<string>("");
 
   React.useEffect(() => {
     if (open) {
@@ -264,6 +342,7 @@ function ExtraDialog({
       setConcept("");
       setAmount(0);
       setPaidAt(todayKey);
+      setServiceId("");
     }
   }, [open, todayKey]);
 
@@ -275,6 +354,7 @@ function ExtraDialog({
         concept,
         amount,
         paidAt,
+        serviceId: serviceId || undefined,
       });
       if (result.success) {
         toast.success("Cobro extra registrado");
@@ -305,6 +385,21 @@ function ExtraDialog({
                 {patients.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Servicio</Label>
+            <Select value={serviceId} onValueChange={setServiceId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccioná un servicio (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {services.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
                   </SelectItem>
                 ))}
               </SelectContent>

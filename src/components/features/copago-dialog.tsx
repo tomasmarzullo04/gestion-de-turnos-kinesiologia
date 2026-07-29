@@ -16,6 +16,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatARS } from "@/lib/money";
 
 export interface CopagoPatient {
@@ -31,6 +38,7 @@ interface Props {
   patient: CopagoPatient | null;
   copagoAmount: number;
   todayKey: string;
+  services?: { id: string; name: string }[];
 }
 
 export function CopagoDialog({
@@ -39,11 +47,13 @@ export function CopagoDialog({
   patient,
   copagoAmount,
   todayKey,
+  services,
 }: Props) {
   const [isPending, startTransition] = React.useTransition();
   const [quantity, setQuantity] = React.useState(1);
   const [unitAmount, setUnitAmount] = React.useState(copagoAmount);
   const [paidAt, setPaidAt] = React.useState(todayKey);
+  const [serviceId, setServiceId] = React.useState<string>("");
 
   const attended = patient?.copagoAttended ?? 0;
   const paid = patient?.copagoPaid ?? 0;
@@ -55,6 +65,7 @@ export function CopagoDialog({
       setQuantity(Math.max(1, owed));
       setUnitAmount(copagoAmount);
       setPaidAt(todayKey);
+      setServiceId("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -68,6 +79,7 @@ export function CopagoDialog({
         quantity,
         unitAmount,
         paidAt,
+        serviceId: serviceId || undefined,
       });
       if (result.success) {
         toast.success(
@@ -119,6 +131,25 @@ export function CopagoDialog({
             </p>
           ) : (
             <>
+              {/* Selector de servicio */}
+              {services && services.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Servicio</Label>
+                  <Select value={serviceId} onValueChange={setServiceId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccioná un servicio (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {services.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="copago-qty">Copagos a pagar</Label>
