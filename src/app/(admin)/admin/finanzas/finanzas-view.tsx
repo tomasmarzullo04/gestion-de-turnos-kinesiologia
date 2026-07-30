@@ -60,6 +60,12 @@ interface ServiceOption {
   name: string;
 }
 
+/** "YYYY-MM-DD" → "DD/MM/YYYY" (reordena el string; sin Date, sin zona horaria). */
+function toDMY(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
+
 interface Props {
   month: number;
   year: number;
@@ -238,7 +244,7 @@ export function FinanzasView({
                       )}
                     </TableCell>
                     <TableCell className="tabular-nums text-sm text-muted-foreground">
-                      {m.paidAt}
+                      {toDMY(m.paidAt)}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatARS(m.amount)}
