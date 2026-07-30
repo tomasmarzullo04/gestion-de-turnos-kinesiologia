@@ -1,5 +1,4 @@
 import { Prisma } from "@prisma/client";
-import { TIMEZONE } from "@/lib/constants";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
@@ -83,12 +82,16 @@ export const paymentService = {
   }): Promise<void> {
     const total = input.quantity * input.unitAmount;
     const [y, m] = input.paidAt.split("-").map(Number);
+    // paid_at es una FECHA de calendario (la que eligió el usuario). La guardamos
+    // como medianoche UTC de ESE día, de forma determinista (sin depender de la
+    // zona de sesión de la DB) y la leemos igual (AT TIME ZONE 'UTC') → el día
+    // mostrado siempre coincide con el elegido.
     await prisma.$executeRaw`
       INSERT INTO payments
         (user_id, type, amount, quantity, period_month, period_year, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'COPAGO', ${total}, ${input.quantity},
-         ${m}, ${y}, ${input.paidAt}::date, ${input.recordedById}, ${input.serviceId}::uuid)
+         ${m}, ${y}, (${input.paidAt}::date) AT TIME ZONE 'UTC', ${input.recordedById}, ${input.serviceId}::uuid)
     `;
   },
 
@@ -107,7 +110,7 @@ export const paymentService = {
         (user_id, type, amount, quantity, period_month, period_year, concept, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'EXTRA', ${input.amount}, 1,
-         ${m}, ${y}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById}, ${input.serviceId}::uuid)
+         ${m}, ${y}, ${input.concept}, (${input.paidAt}::date) AT TIME ZONE 'UTC', ${input.recordedById}, ${input.serviceId}::uuid)
     `;
   },
 
@@ -189,7 +192,7 @@ export const paymentService = {
         }[]
       >`
         SELECT p.id, p.type, p.amount, p.quantity, p.concept,
-               to_char(p.paid_at AT TIME ZONE ${TIMEZONE}, 'YYYY-MM-DD') AS paid_at,
+               to_char(p.paid_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS paid_at,
                u.name AS patient_name,
                sv.name AS service_name
         FROM payments p
