@@ -92,6 +92,7 @@ export const slotService = {
                count(*) AS total_slots
         FROM slots s
         WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
+          AND NOT s.is_first_time
           AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
           AND s.service_id = ${serviceId}::uuid
         GROUP BY s.date
@@ -108,6 +109,7 @@ export const slotService = {
                count(*) AS total_slots
         FROM slots s
         WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
+          AND NOT s.is_first_time
           AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
         GROUP BY s.date
         ORDER BY s.date
@@ -140,6 +142,7 @@ export const slotService = {
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date
+            AND NOT s.is_first_time
             AND s.service_id = ${serviceId}::uuid
           ORDER BY s.start_time
         `
@@ -155,6 +158,7 @@ export const slotService = {
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date
+            AND NOT s.is_first_time
           ORDER BY s.start_time
         `;
     return rows.map(toSlotView);

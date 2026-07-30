@@ -36,8 +36,10 @@ import {
   getFirstTimeRule,
   isFirstTimeDayAllowed,
   isFirstTimeSlotAllowed,
+  usesIndividualFirstTime,
 } from "@/lib/first-time-rule";
 import { cn } from "@/lib/utils";
+import { FirstTimeKinesioBooking } from "@/app/(patient)/portal/reservar/first-time-kinesio-booking";
 import {
   ServiceScheduleHint,
   type ScheduleEntry,
@@ -113,6 +115,16 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
     selectedService && restrictedSlugs.includes(selectedService.slug)
       ? getFirstTimeRule(selectedService.slug)
       : null;
+
+  // Caso especial (kinesio + primerizo): turnos individuales de 40 min. Único
+  // punto de decisión; si es false, el flujo por hora de siempre queda intacto.
+  const kinesio40 = Boolean(
+    selectedService &&
+      usesIndividualFirstTime(
+        selectedService.slug,
+        restrictedSlugs.includes(selectedService.slug),
+      ),
+  );
 
   // ── Filtrado de días por la ventana del primer turno ───────────────────
   const filteredDays = React.useMemo(() => {
@@ -336,7 +348,7 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
             selectedId={selectedService?.id ?? null}
             onSelect={handleServiceSelect}
           />
-          {selectedService && (
+          {selectedService && !kinesio40 && (
             <ServiceScheduleHint
               serviceName={selectedService.name}
               entries={schedules[selectedService.id] ?? []}
@@ -346,6 +358,10 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
         </CardContent>
       </Card>
 
+      {kinesio40 ? (
+        <FirstTimeKinesioBooking />
+      ) : (
+        <>
       {/* Paso 2 — Día */}
       <Card className={cn("transition-opacity duration-300", !selectedService && "opacity-55 pointer-events-none")}>
         <CardContent className="space-y-4 p-5 sm:p-6">
@@ -497,6 +513,8 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   );
 }

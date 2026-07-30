@@ -52,14 +52,17 @@ export interface FirstTimeRule {
  * IMPORTANTE: la clave es el `slug` (estable), no el nombre visible.
  */
 export const FIRST_TIME_RULES: Record<string, FirstTimeRule> = {
-  // Kinesiología (slug interno "rehab"): Lun tarde · Mié completo · Vie mañana.
+  // Kinesiología (slug interno "rehab"): PRIMER turno en turnos individuales de
+  // 40 min (1 persona). Ventanas: Lun tarde · Mié mañana y tarde · Vie mañana.
   rehab: {
     slug: "rehab",
-    windows: { 1: ["afternoon"], 3: ["full"], 5: ["morning"] },
+    windows: { 1: ["afternoon"], 3: ["morning", "afternoon"], 5: ["morning"] },
     message:
-      "Tu primer turno de kinesiología debe ser lunes a la tarde, miércoles, o viernes a la mañana.",
+      "Tu primer turno de kinesiología debe ser lunes a la tarde, miércoles (mañana o tarde), o viernes a la mañana.",
     emptyMessage:
       "No hay turnos disponibles para tu primer turno de kinesiología en los próximos días.",
+    // Modo especial: el primer turno se ofrece en turnos individuales de 40 min.
+    firstTimeSlotMinutes: 40,
   },
   // GYM: Lun tarde · Mié mañana Y tarde (sin mediodía) · Vie mañana.
   gym: {
@@ -74,6 +77,9 @@ export const FIRST_TIME_RULES: Record<string, FirstTimeRule> = {
 
 /** Slugs con regla de primer turno (para consultas y validaciones). */
 export const FIRST_TIME_RULE_SLUGS = Object.keys(FIRST_TIME_RULES);
+
+/** Slug interno de Kinesiología (estable; el nombre visible es "Kinesiología"). */
+export const KINESIO_SLUG = "rehab";
 
 /** Devuelve la regla del servicio (por slug), o `null` si no tiene. */
 export function getFirstTimeRule(slug: string | null | undefined): FirstTimeRule | null {
@@ -102,4 +108,63 @@ export function isFirstTimeSlotAllowed(
     const { startHour, endHour } = SHIFTS[s];
     return hour >= startHour && hour < endHour;
   });
+}
+
+// ── Modo "turnos individuales de 40 min" (caso especial: kinesio primer turno) ──
+
+/**
+ * ÚNICO punto de decisión del caso especial. Devuelve `true` SOLO si el servicio
+ * tiene modo de turnos individuales (firstTimeSlotMinutes) Y es el primer turno
+ * del paciente. En cualquier otro caso `false` → todo funciona como siempre.
+ */
+export function usesIndividualFirstTime(
+  slug: string | null | undefined,
+  esPrimerTurno: boolean,
+): boolean {
+  if (!esPrimerTurno) return false;
+  const rule = getFirstTimeRule(slug);
+  return Boolean(rule?.firstTimeSlotMinutes);
+}
+
+function minutesToHM(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Grilla de turnos individuales de un día para una regla con
+ * `firstTimeSlotMinutes`. Cada ventana arranca en su hora de inicio y avanza de
+ * a `firstTimeSlotMinutes`, incluyendo SOLO los turnos que cierran COMPLETOS
+ * dentro de la ventana. Devuelve `[]` si la regla no tiene modo individual o el
+ * día no está en ventana. Fuente única para UI y validación de servidor.
+ */
+export function firstTimeGrid(
+  rule: FirstTimeRule,
+  dayOfWeek: number,
+): { start: string; end: string }[] {
+  const dur = rule.firstTimeSlotMinutes;
+  if (!dur) return [];
+  const shifts = rule.windows[dayOfWeek];
+  if (!shifts) return [];
+  const out: { start: string; end: string }[] = [];
+  for (const s of shifts) {
+    const { startHour, endHour } = SHIFTS[s];
+    const startM = startHour * 60;
+    const endM = endHour * 60;
+    for (let t = startM; t + dur <= endM; t += dur) {
+      out.push({ start: minutesToHM(t), end: minutesToHM(t + dur) });
+    }
+  }
+  return out.sort((a, b) => a.start.localeCompare(b.start));
+}
+
+/** ¿`startTime` ("HH:MM") es un turno válido de la grilla de 40 min de ese día? */
+export function isValidFirstTimeGridSlot(
+  rule: FirstTimeRule,
+  dayOfWeek: number,
+  startTime: string,
+): { valid: boolean; endTime: string | null } {
+  const match = firstTimeGrid(rule, dayOfWeek).find((g) => g.start === startTime);
+  return { valid: Boolean(match), endTime: match?.end ?? null };
 }
