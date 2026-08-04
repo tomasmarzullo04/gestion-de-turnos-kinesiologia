@@ -132,26 +132,60 @@ function minutesToHM(mins: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+function hmToMinutes(hm: string): number {
+  const [h, m] = hm.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+const NOON_MINUTES = 12 * 60;
+
+export type Franja = { start: string; end: string };
+
 /**
- * Grilla de turnos individuales de un día para una regla con
- * `firstTimeSlotMinutes`. Cada ventana arranca en su hora de inicio y avanza de
- * a `firstTimeSlotMinutes`, incluyendo SOLO los turnos que cierran COMPLETOS
- * dentro de la ventana. Devuelve `[]` si la regla no tiene modo individual o el
- * día no está en ventana. Fuente única para UI y validación de servidor.
+ * Clasifica una franja de la plantilla en "mañana" o "tarde" según el corte del
+ * mediodía (12:00): termina ≤ 12:00 = mañana; empieza ≥ 12:00 = tarde. Devuelve
+ * `null` si la franja CRUZA el mediodía (caso a reportar; no se clasifica).
  */
-export function firstTimeGrid(
+export function classifyFranja(franja: Franja): "morning" | "afternoon" | null {
+  const s = hmToMinutes(franja.start);
+  const e = hmToMinutes(franja.end);
+  if (e <= NOON_MINUTES) return "morning";
+  if (s >= NOON_MINUTES) return "afternoon";
+  return null; // cruza el mediodía
+}
+
+/**
+ * Grilla de turnos individuales de 40 min = INTERSECCIÓN de:
+ *  - PLANTILLA: las franjas reales del servicio ese día (horarios/cortes) →
+ *    `franjas`. Los turnos reinician en el inicio de CADA franja y solo se
+ *    incluyen los que cierran COMPLETOS dentro de ella.
+ *  - REGLA DE NEGOCIO: qué parte del día se ofrece (`rule.windows[dow]`:
+ *    "morning"/"afternoon"). Solo se tilan las franjas cuya parte del día está
+ *    permitida por la regla.
+ *
+ * NO usa horarios hardcodeados: los cortes salen de la plantilla. `SHIFTS` queda
+ * solo para la regla por hora de GYM.
+ */
+export function firstTimeGridFromFranjas(
   rule: FirstTimeRule,
   dayOfWeek: number,
+  franjas: Franja[],
 ): { start: string; end: string }[] {
   const dur = rule.firstTimeSlotMinutes;
   if (!dur) return [];
-  const shifts = rule.windows[dayOfWeek];
-  if (!shifts) return [];
+  const allowed = rule.windows[dayOfWeek];
+  if (!allowed || allowed.length === 0) return [];
+  const allowAll = allowed.includes("full");
+  const allowedSet = new Set(allowed);
+
   const out: { start: string; end: string }[] = [];
-  for (const s of shifts) {
-    const { startHour, endHour } = SHIFTS[s];
-    const startM = startHour * 60;
-    const endM = endHour * 60;
+  for (const f of franjas) {
+    if (!allowAll) {
+      const cls = classifyFranja(f);
+      if (!cls || !allowedSet.has(cls)) continue;
+    }
+    const startM = hmToMinutes(f.start);
+    const endM = hmToMinutes(f.end);
     for (let t = startM; t + dur <= endM; t += dur) {
       out.push({ start: minutesToHM(t), end: minutesToHM(t + dur) });
     }
@@ -159,12 +193,15 @@ export function firstTimeGrid(
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
-/** ¿`startTime` ("HH:MM") es un turno válido de la grilla de 40 min de ese día? */
+/** ¿`startTime` es un turno válido de la grilla intersectada (plantilla ∩ regla)? */
 export function isValidFirstTimeGridSlot(
   rule: FirstTimeRule,
   dayOfWeek: number,
+  franjas: Franja[],
   startTime: string,
 ): { valid: boolean; endTime: string | null } {
-  const match = firstTimeGrid(rule, dayOfWeek).find((g) => g.start === startTime);
+  const match = firstTimeGridFromFranjas(rule, dayOfWeek, franjas).find(
+    (g) => g.start === startTime,
+  );
   return { valid: Boolean(match), endTime: match?.end ?? null };
 }

@@ -11,10 +11,12 @@ import {
 import {
   FIRST_TIME_RULE_SLUGS,
   KINESIO_SLUG,
-  firstTimeGrid,
+  classifyFranja,
+  firstTimeGridFromFranjas,
   getFirstTimeRule,
   isFirstTimeSlotAllowed,
   isValidFirstTimeGridSlot,
+  type Franja,
 } from "@/lib/first-time-rule";
 import { BOOKING_CONFIG } from "@/lib/booking-config";
 import { parseLocalDateKey, toLocalDateKey } from "@/lib/datetime";
@@ -516,9 +518,40 @@ export const bookingService = {
   // Aislado detrás de (kinesio + primerizo). NO toca el flujo por hora.
 
   /**
+   * Franjas ACTIVAS de la plantilla de un servicio, agrupadas por día de la
+   * semana (0=domingo, igual que Date.getDay()). Fuente de verdad de los
+   * HORARIOS/cortes de la grilla de 40 min. Loguea si alguna franja cruza el
+   * mediodía (no se puede clasificar mañana/tarde).
+   */
+  async getTemplateFranjasByDow(serviceId: string): Promise<Map<number, Franja[]>> {
+    const rows = await prisma.$queryRaw<{ dow: number; start: string; end: string }[]>`
+      SELECT day_of_week AS dow,
+             to_char(start_time, 'HH24:MI') AS start,
+             to_char(end_time, 'HH24:MI')   AS end
+      FROM slot_templates
+      WHERE service_id = ${serviceId}::uuid AND active
+    `;
+    const map = new Map<number, Franja[]>();
+    for (const r of rows) {
+      if (classifyFranja({ start: r.start, end: r.end }) === null) {
+        logger.warn("Franja de plantilla cruza el mediodía; no se clasifica para 40 min", {
+          serviceId,
+          dow: r.dow,
+          franja: `${r.start}-${r.end}`,
+        });
+      }
+      const arr = map.get(r.dow) ?? [];
+      arr.push({ start: r.start, end: r.end });
+      map.set(r.dow, arr);
+    }
+    return map;
+  },
+
+  /**
    * Disponibilidad VIRTUAL de turnos individuales de 40 min para el primer turno
-   * de kinesio. No materializa nada: genera la grilla de las ventanas y marca
-   * como tomados los turnos ya reservados (slots is_first_time con cupo lleno).
+   * de kinesio. La grilla es la INTERSECCIÓN plantilla ∩ regla de negocio (los
+   * horarios salen de la plantilla; qué parte del día, de la regla). No
+   * materializa nada; marca como tomados los turnos ya reservados.
    * Devuelve `[]` si el paciente ya cumplió o el servicio no tiene el modo.
    */
   async getFirstTimeKinesioAvailability(
@@ -535,6 +568,9 @@ export const bookingService = {
     `;
     const serviceId = svc[0]?.id;
     if (!serviceId) return [];
+
+    // Horarios reales de cada día (plantilla de Kinesiología).
+    const franjasByDow = await this.getTemplateFranjasByDow(serviceId);
 
     // Turnos de 40 min ya tomados (materializados y con cupo ocupado).
     const takenRows = await prisma.$queryRaw<{ d: string; t: string }[]>`
@@ -564,7 +600,7 @@ export const bookingService = {
     for (let i = 0; i < BOOKING_CONFIG.generationDays; i++) {
       const d = addDays(today, i);
       const dateKey = format(d, "yyyy-MM-dd");
-      const grid = firstTimeGrid(rule, d.getDay());
+      const grid = firstTimeGridFromFranjas(rule, d.getDay(), franjasByDow.get(d.getDay()) ?? []);
       if (grid.length === 0) continue;
 
       const turnos = grid
@@ -607,11 +643,20 @@ export const bookingService = {
       throw new BusinessError("Ya no estás en tu primer turno de kinesiología.");
     }
 
-    // Día en ventana + hora alineada a la grilla de 40 min (autoridad servidor).
+    const svc = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM services WHERE slug = ${KINESIO_SLUG}
+    `;
+    const serviceId = svc[0]?.id;
+    if (!serviceId) throw new BusinessError("Servicio no encontrado.");
+
+    // Autoridad del servidor: el turno debe caer en la grilla INTERSECTADA
+    // (franjas reales de la plantilla ∩ parte del día permitida por la regla).
+    // Un turno fuera de las franjas de la plantilla se rechaza.
     const day = parseLocalDateKey(date);
-    const { valid, endTime } = isValidFirstTimeGridSlot(rule, day.getDay(), startTime);
+    const franjas = (await this.getTemplateFranjasByDow(serviceId)).get(day.getDay()) ?? [];
+    const { valid, endTime } = isValidFirstTimeGridSlot(rule, day.getDay(), franjas, startTime);
     if (!valid || !endTime) {
-      throw new BusinessError("Ese horario no es un turno válido de 40 minutos.");
+      throw new BusinessError("Ese horario no es un turno válido para el primer turno de kinesiología.");
     }
 
     const fut = await prisma.$queryRaw<{ ok: boolean }[]>`
@@ -620,12 +665,6 @@ export const bookingService = {
     if (!fut[0]?.ok) {
       throw new BusinessError("Ese turno ya pasó. Elegí uno futuro.");
     }
-
-    const svc = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM services WHERE slug = ${KINESIO_SLUG}
-    `;
-    const serviceId = svc[0]?.id;
-    if (!serviceId) throw new BusinessError("Servicio no encontrado.");
 
     // Materialización atómica: 1 solo slot por (servicio, fecha, hora) gracias al
     // índice único parcial. Si ya existe (otro lo materializó), lo tomamos.
