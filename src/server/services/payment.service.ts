@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { getCycleRange, shiftCycle } from "@/lib/financial-cycle";
 import { logger } from "@/lib/logger";
 
 const DEFAULT_COPAGO = 4000;
@@ -33,7 +34,7 @@ export interface ServiceRevenue {
   total: number;
 }
 
-export interface MonthlySummary {
+export interface PeriodSummary {
   totalCopagos: number;
   totalExtras: number;
   total: number;
@@ -127,10 +128,27 @@ export const paymentService = {
     `;
   },
 
-  /** Resumen económico de un mes: totales (en base), contadores y movimientos. */
-  async getMonthlySummary(month: number, year: number, serviceId?: string): Promise<MonthlySummary> {
-    const prev = month === 1 ? { m: 12, y: year - 1 } : { m: month - 1, y: year };
-    
+  /**
+   * Resumen económico de un PERÍODO financiero (ciclo del 15 al 15): totales
+   * (en base), contadores y movimientos. `month`/`year` identifican el ciclo por
+   * su mes/año de INICIO (el día de corte). Ej: (8, 2026) = 15/08 → 14/09.
+   *
+   * La agrupación se hace por `paid_at` dentro del rango del ciclo (half-open
+   * [inicio, siguiente corte)), leyendo la fecha con `AT TIME ZONE 'UTC'` —el
+   * mismo criterio con que se guarda— para que el corte respete el día elegido
+   * sin desfases de zona horaria. Ciclos contiguos ⇒ ningún pago queda fuera ni
+   * se cuenta dos veces.
+   */
+  async getPeriodSummary(month: number, year: number, serviceId?: string): Promise<PeriodSummary> {
+    const cur = getCycleRange(month, year);
+    const prevCycle = shiftCycle(month, year, -1);
+    const prv = getCycleRange(prevCycle.month, prevCycle.year);
+
+    // Rango del ciclo por fecha de pago (misma lectura UTC que en el INSERT).
+    const inCurrent = Prisma.sql`(paid_at AT TIME ZONE 'UTC')::date >= ${cur.startKey}::date AND (paid_at AT TIME ZONE 'UTC')::date < ${cur.endExclusiveKey}::date`;
+    const inCurrentP = Prisma.sql`(p.paid_at AT TIME ZONE 'UTC')::date >= ${cur.startKey}::date AND (p.paid_at AT TIME ZONE 'UTC')::date < ${cur.endExclusiveKey}::date`;
+    const inPrev = Prisma.sql`(paid_at AT TIME ZONE 'UTC')::date >= ${prv.startKey}::date AND (paid_at AT TIME ZONE 'UTC')::date < ${prv.endExclusiveKey}::date`;
+
     let serviceFilter = Prisma.empty;
     let pServiceFilter = Prisma.empty;
     if (serviceId) {
@@ -143,7 +161,7 @@ export const paymentService = {
       }
     }
 
-    const empty: MonthlySummary = {
+    const empty: PeriodSummary = {
       totalCopagos: 0,
       totalExtras: 0,
       total: 0,
@@ -172,12 +190,12 @@ export const paymentService = {
           count(*)::int                                                AS payment_count,
           count(DISTINCT user_id)::int                                 AS payers
         FROM payments
-        WHERE period_year = ${year} AND period_month = ${month} AND voided_at IS NULL ${serviceFilter}
+        WHERE ${inCurrent} AND voided_at IS NULL ${serviceFilter}
       `,
       prisma.$queryRaw<{ total: number }[]>`
         SELECT coalesce(sum(amount), 0)::int AS total
         FROM payments
-        WHERE period_year = ${prev.y} AND period_month = ${prev.m} AND voided_at IS NULL ${serviceFilter}
+        WHERE ${inPrev} AND voided_at IS NULL ${serviceFilter}
       `,
       prisma.$queryRaw<
         {
@@ -198,7 +216,7 @@ export const paymentService = {
         FROM payments p
         LEFT JOIN "User" u ON u.id = p.user_id
         LEFT JOIN services sv ON sv.id = p.service_id
-        WHERE p.period_year = ${year} AND p.period_month = ${month} AND p.voided_at IS NULL ${pServiceFilter}
+        WHERE ${inCurrentP} AND p.voided_at IS NULL ${pServiceFilter}
         ORDER BY p.paid_at DESC, p.recorded_at DESC
       `,
       // ── Desglose de ingresos por servicio ────────────────────────────────
@@ -217,8 +235,7 @@ export const paymentService = {
           coalesce(sum(p.amount), 0)::int   AS total
         FROM payments p
         LEFT JOIN services sv ON sv.id = p.service_id
-        WHERE p.period_year = ${year}
-          AND p.period_month = ${month}
+        WHERE ${inCurrentP}
           AND p.voided_at IS NULL
           ${pServiceFilter}
         GROUP BY p.service_id, sv.name, sv.color
