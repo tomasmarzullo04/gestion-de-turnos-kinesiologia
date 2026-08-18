@@ -129,14 +129,15 @@ export async function getMySameDayBookingsAction(
 
 /** Disponibilidad de turnos de 40 min para el primer turno de kinesio. */
 export async function getFirstTimeKinesioAvailabilityAction(): Promise<
-  ActionResult<
-    { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[]
-  >
+  ActionResult<{
+    alreadyBooked: boolean;
+    days: { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[];
+  }>
 > {
   try {
     const user = await assertRole(ROLES.PATIENT);
-    const days = await bookingService.getFirstTimeKinesioAvailability(user.id);
-    return ok(days);
+    const result = await bookingService.getFirstTimeKinesioAvailability(user.id);
+    return ok(result);
   } catch (error) {
     return fromError(error);
   }

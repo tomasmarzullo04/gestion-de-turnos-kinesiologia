@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CalendarOff, Loader2 } from "lucide-react";
+import { CalendarCheck, CalendarClock, CalendarOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -34,6 +34,7 @@ interface DayAvail {
 export function FirstTimeKinesioBooking() {
   const router = useRouter();
   const [days, setDays] = React.useState<DayAvail[]>([]);
+  const [alreadyBooked, setAlreadyBooked] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [selectedDate, setSelectedDate] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<Turno | null>(null);
@@ -42,8 +43,10 @@ export function FirstTimeKinesioBooking() {
   const load = React.useCallback(() => {
     setLoading(true);
     void getFirstTimeKinesioAvailabilityAction().then((res) => {
-      if (res.success) setDays(res.data);
-      else toast.error(res.error);
+      if (res.success) {
+        setDays(res.data.days);
+        setAlreadyBooked(res.data.alreadyBooked);
+      } else toast.error(res.error);
       setLoading(false);
     });
   }, []);
@@ -82,6 +85,20 @@ export function FirstTimeKinesioBooking() {
               <Skeleton key={i} className="h-16 w-20 rounded-lg" />
             ))}
           </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (alreadyBooked) {
+    return (
+      <Card>
+        <CardContent className="p-5 sm:p-6">
+          <EmptyState
+            icon={CalendarClock}
+            title="Ya tenés tu primer turno reservado"
+            description="El primer turno de kinesiología se reserva una sola vez. Cuando asistas, vas a poder sacar turnos normales. Podés ver tu turno en la sección Mis turnos."
+          />
         </CardContent>
       </Card>
     );

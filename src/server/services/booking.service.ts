@@ -502,6 +502,31 @@ export const bookingService = {
   },
 
   /**
+   * ¿El paciente YA tiene reservado (a futuro) su turno especial de 40 min de
+   * primer turno de kinesio? El horario especial es UNA sola vez: mientras haya
+   * una reserva CONFIRMED sobre una franja `is_first_time` de kinesio con fecha
+   * futura, no se le ofrece —ni puede sacar— otro. Recién cuando ASISTA
+   * (PRESENT → `hasClearedFirstTime`) pasa a los turnos normales por hora.
+   *
+   * Identifica el servicio por `slug` (estable), nunca por nombre.
+   */
+  async hasUpcomingFirstTimeKinesioBooking(userId: string): Promise<boolean> {
+    const rows = await prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM bookings b
+        JOIN slots s ON s.id = b.slot_id
+        WHERE b.user_id = ${userId}::text
+          AND b.status = 'CONFIRMED'
+          AND s.is_first_time = true
+          AND s.service_id = (SELECT id FROM services WHERE slug = ${KINESIO_SLUG})
+          AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+      ) AS ok
+    `;
+    return rows[0]?.ok ?? false;
+  },
+
+  /**
    * Slugs con regla de primer turno que el paciente TODAVÍA no cumplió (sigue
    * restringido a ventana). Para que la UI refleje la restricción por servicio.
    */
@@ -552,22 +577,35 @@ export const bookingService = {
    * de kinesio. La grilla es la INTERSECCIÓN plantilla ∩ regla de negocio (los
    * horarios salen de la plantilla; qué parte del día, de la regla). No
    * materializa nada; marca como tomados los turnos ya reservados.
-   * Devuelve `[]` si el paciente ya cumplió o el servicio no tiene el modo.
+   *
+   * Devuelve `{ alreadyBooked, days }`:
+   *  - `days: []` si el paciente ya cumplió o el servicio no tiene el modo.
+   *  - `alreadyBooked: true` (y `days: []`) si YA reservó su turno especial a
+   *    futuro: el horario especial es UNA sola vez, así que en vez de la grilla
+   *    la UI muestra el mensaje de "ya tenés tu primer turno reservado".
    */
   async getFirstTimeKinesioAvailability(
     userId: string,
-  ): Promise<
-    { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[]
-  > {
+  ): Promise<{
+    alreadyBooked: boolean;
+    days: { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[];
+  }> {
     const rule = getFirstTimeRule(KINESIO_SLUG);
-    if (!rule?.firstTimeSlotMinutes) return [];
-    if (await this.hasClearedFirstTime(userId, KINESIO_SLUG)) return [];
+    if (!rule?.firstTimeSlotMinutes) return { alreadyBooked: false, days: [] };
+    if (await this.hasClearedFirstTime(userId, KINESIO_SLUG)) {
+      return { alreadyBooked: false, days: [] };
+    }
+    // El especial es una sola vez: si ya tiene un 40 min a futuro, no ofrecemos
+    // la grilla; la UI muestra el mensaje correspondiente.
+    if (await this.hasUpcomingFirstTimeKinesioBooking(userId)) {
+      return { alreadyBooked: true, days: [] };
+    }
 
     const svc = await prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM services WHERE slug = ${KINESIO_SLUG}
     `;
     const serviceId = svc[0]?.id;
-    if (!serviceId) return [];
+    if (!serviceId) return { alreadyBooked: false, days: [] };
 
     // Horarios reales de cada día (plantilla de Kinesiología).
     const franjasByDow = await this.getTemplateFranjasByDow(serviceId);
@@ -612,7 +650,7 @@ export const bookingService = {
         }));
       if (turnos.length > 0) out.push({ date: dateKey, turnos });
     }
-    return out;
+    return { alreadyBooked: false, days: out };
   },
 
   /**
@@ -641,6 +679,14 @@ export const bookingService = {
     }
     if (await this.hasClearedFirstTime(userId, KINESIO_SLUG)) {
       throw new BusinessError("Ya no estás en tu primer turno de kinesiología.");
+    }
+    // Autoridad del servidor: el turno especial de 40 min es UNA sola vez. Si el
+    // paciente ya tiene uno reservado a futuro, se rechaza (no puede pre-reservar
+    // varios). Recién cuando asista pasa a los turnos normales por hora.
+    if (await this.hasUpcomingFirstTimeKinesioBooking(userId)) {
+      throw new BusinessError(
+        "Ya tenés tu primer turno de kinesiología reservado. Cuando asistas, vas a poder sacar turnos normales.",
+      );
     }
 
     const svc = await prisma.$queryRaw<{ id: string }[]>`
