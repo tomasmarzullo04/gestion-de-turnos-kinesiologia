@@ -31,7 +31,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey, parseLocalDateKey } from "@/lib/datetime";
 import {
   getFirstTimeRule,
   isFirstTimeDayAllowed,
@@ -429,7 +429,7 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
       {/* Aviso: ya tiene un turno ese día */}
       {selectedDate && sameDay.length > 0 && (
         <SameDayWarning
-          title={`Ya tenés un turno el ${formatDate(parseLocalDateKey(selectedDate))}`}
+          title={`Ya tenés un turno el ${formatDateKey(selectedDate)}`}
           bookings={sameDay}
           onCancel={handleCancelSameDay}
           cancelling={cancellingSameDay}

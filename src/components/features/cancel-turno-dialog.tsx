@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 export interface CancelTarget {
@@ -101,7 +101,7 @@ export function CancelTurnoDialog({
             </p>
             <p className="flex items-center gap-2 capitalize">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              {formatDate(parseLocalDateKey(target.date))}
+              {formatDateKey(target.date)}
             </p>
             <p className="flex items-center gap-2 tabular-nums">
               <Clock className="h-4 w-4 text-muted-foreground" />

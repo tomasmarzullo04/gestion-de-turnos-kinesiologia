@@ -36,7 +36,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey } from "@/lib/datetime";
 import { type SameDayBooking } from "@/server/services/booking.service";
 import { type SlotView } from "@/server/services/slot.service";
 
@@ -263,7 +263,7 @@ export function CargarTurnoForm({ patients: initialPatients, services, todayKey 
           {/* Aviso: el paciente ya tiene un turno ese día */}
           {userId && sameDay.length > 0 && (
             <SameDayWarning
-              title={`Este paciente ya tiene un turno el ${formatDate(parseLocalDateKey(date))}`}
+              title={`Este paciente ya tiene un turno el ${formatDateKey(date)}`}
               bookings={sameDay}
               onCancel={handleCancelSameDay}
               cancelling={cancellingSameDay}

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDate, formatDateShort, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey, formatDateKeyShort } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 interface Turno {
@@ -125,7 +125,6 @@ export function FirstTimeKinesioBooking() {
           <p className="text-sm font-medium">Elegí el día</p>
           <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
             {days.map((d) => {
-              const date = parseLocalDateKey(d.date);
               const active = selectedDate === d.date;
               return (
                 <button
@@ -141,7 +140,7 @@ export function FirstTimeKinesioBooking() {
                     active ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
                   )}
                 >
-                  <span className="text-xs font-medium capitalize">{formatDateShort(date)}</span>
+                  <span className="text-xs font-medium capitalize">{formatDateKeyShort(d.date)}</span>
                 </button>
               );
             })}
@@ -151,7 +150,7 @@ export function FirstTimeKinesioBooking() {
         {day && (
           <div className="space-y-2">
             <p className="text-sm font-medium capitalize">
-              Turnos del {formatDate(parseLocalDateKey(day.date))}
+              Turnos del {formatDateKey(day.date)}
             </p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {day.turnos.map((t) => {

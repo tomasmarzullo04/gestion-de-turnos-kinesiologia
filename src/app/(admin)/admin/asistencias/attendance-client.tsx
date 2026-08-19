@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { addDays, format } from "date-fns";
-import { es } from "date-fns/locale";
 import {
   CalendarDays,
   ChevronLeft,
@@ -29,7 +28,7 @@ import {
   ATTENDANCE_STATUS_LABELS,
   type AttendanceStatus,
 } from "@/lib/booking-config";
-import { parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey, parseLocalDateKey } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { type AttendanceSlot } from "@/server/services/attendance.service";
 
@@ -183,7 +182,7 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
       </div>
 
       <p className="text-sm font-medium capitalize text-muted-foreground">
-        {format(day, "EEEE d 'de' MMMM 'de' yyyy", { locale: es })}
+        {formatDateKey(selectedDate)}
       </p>
 
       {/* Resumen del día */}

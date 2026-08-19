@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DAYS_OF_WEEK } from "@/lib/constants";
-import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey } from "@/lib/datetime";
 import { getFirstTimeRule } from "@/lib/first-time-rule";
 import { cn } from "@/lib/utils";
 import {
@@ -263,7 +263,7 @@ export function SeriesBuilder({ services, restrictedSlugs, todayKey, defaultToDa
                     ) : (
                       <X className="h-4 w-4 text-muted-foreground" />
                     )}
-                    {formatDate(parseLocalDateKey(r.date))}
+                    {formatDateKey(r.date)}
                     <span className="tabular-nums text-muted-foreground">· {r.startTime}{r.endTime ? `–${r.endTime}` : ""} h</span>
                   </span>
                   <Badge variant="secondary" className={meta.className}>

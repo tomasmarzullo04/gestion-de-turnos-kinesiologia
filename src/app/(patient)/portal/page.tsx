@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type BookingStatus } from "@/lib/booking-config";
 import { requirePatient } from "@/lib/auth/session";
-import { formatDate, formatDateShort, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey, formatDateKeyShort } from "@/lib/datetime";
 import { bookingService } from "@/server/services/booking.service";
 
 export const metadata: Metadata = { title: "Inicio" };
@@ -66,7 +66,7 @@ export default async function PortalHomePage() {
       <section className="grid gap-4 sm:grid-cols-3">
         <StatCard
           label="Próximo turno"
-          value={next ? formatDateShort(parseLocalDateKey(next.date)) : "—"}
+          value={next ? formatDateKeyShort(next.date) : "—"}
           icon={CalendarCheck}
         />
         <StatCard
@@ -103,7 +103,7 @@ export default async function PortalHomePage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold capitalize text-lg">
-                        {formatDate(parseLocalDateKey(next.date))}
+                        {formatDateKey(next.date)}
                       </span>
                       <StatusBadge status={next.status as BookingStatus} />
                     </div>
@@ -229,7 +229,7 @@ export default async function PortalHomePage() {
                       className="flex items-center justify-between py-2.5"
                     >
                       <span className="text-sm font-medium capitalize">
-                        {formatDateShort(parseLocalDateKey(b.date))}
+                        {formatDateKeyShort(b.date)}
                       </span>
                       <span className="text-sm tabular-nums text-muted-foreground">
                         {b.startTime}–{b.endTime} h
@@ -261,7 +261,7 @@ export default async function PortalHomePage() {
                       className="flex items-center justify-between py-2.5"
                     >
                       <span className="text-sm font-medium capitalize">
-                        {formatDateShort(parseLocalDateKey(b.date))}
+                        {formatDateKeyShort(b.date)}
                       </span>
                       <span className="text-sm tabular-nums text-muted-foreground">
                         {b.startTime}–{b.endTime} h
