@@ -12,8 +12,10 @@ import {
   FIRST_TIME_RULE_SLUGS,
   KINESIO_SLUG,
   classifyFranja,
+  firstTimeBlockedMessage,
   firstTimeGridFromFranjas,
   getFirstTimeRule,
+  isFirstTimeDateBlocked,
   isFirstTimeSlotAllowed,
   isValidFirstTimeGridSlot,
   type Franja,
@@ -141,6 +143,14 @@ export const bookingService = {
     if (rule && slot.service_id) {
       const cleared = await this.hasClearedFirstTime(userId, rule.slug);
       if (!cleared) {
+        // Excepción puntual por fecha (solo primerizos): si el día de la franja
+        // está bloqueado para el primer turno de ese servicio, se rechaza. No
+        // toca a no-primerizos (no entran acá) ni a la carga del profesional
+        // (adminBook). `slot.date` es la fecha de calendario (día local) de la
+        // franja, así que compara el día correcto.
+        if (isFirstTimeDateBlocked(rule.slug, slot.date)) {
+          throw new BusinessError(firstTimeBlockedMessage(rule.slug, slot.date));
+        }
         // Autoridad del modo especial: si el servicio usa turnos individuales
         // (kinesio primer turno), la franja POR HORA no es válida → debe usar el
         // flujo de 40 min. Solo aplica al camino del paciente (este `book`).
@@ -638,6 +648,9 @@ export const bookingService = {
     for (let i = 0; i < BOOKING_CONFIG.generationDays; i++) {
       const d = addDays(today, i);
       const dateKey = format(d, "yyyy-MM-dd");
+      // Excepción puntual: fecha bloqueada para el primer turno → no se ofrece.
+      // `dateKey` sale de `today` en hora Argentina, así que compara el día local.
+      if (isFirstTimeDateBlocked(KINESIO_SLUG, dateKey)) continue;
       const grid = firstTimeGridFromFranjas(rule, d.getDay(), franjasByDow.get(d.getDay()) ?? []);
       if (grid.length === 0) continue;
 
@@ -687,6 +700,11 @@ export const bookingService = {
       throw new BusinessError(
         "Ya tenés tu primer turno de kinesiología reservado. Cuando asistas, vas a poder sacar turnos normales.",
       );
+    }
+    // Excepción puntual por fecha (solo primerizos): `date` es la fecha-clave en
+    // hora Argentina que eligió el paciente. Autoridad del servidor.
+    if (isFirstTimeDateBlocked(KINESIO_SLUG, date)) {
+      throw new BusinessError(firstTimeBlockedMessage(KINESIO_SLUG, date));
     }
 
     const svc = await prisma.$queryRaw<{ id: string }[]>`

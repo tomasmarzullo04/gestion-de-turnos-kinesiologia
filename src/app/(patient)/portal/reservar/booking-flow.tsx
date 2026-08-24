@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDateKey, parseLocalDateKey } from "@/lib/datetime";
 import {
   getFirstTimeRule,
+  isFirstTimeDateBlocked,
   isFirstTimeDayAllowed,
   isFirstTimeSlotAllowed,
   usesIndividualFirstTime,
@@ -127,16 +128,30 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
   );
 
   // ── Filtrado de días por la ventana del primer turno ───────────────────
+  // Solo aplica a primerizos (firstTimeRule != null). Además de la ventana,
+  // saca los días con excepción puntual (fecha bloqueada para primer turno):
+  // el primerizo no los ve. Los no-primerizos no pasan por acá.
   const filteredDays = React.useMemo(() => {
     if (!firstTimeRule) return days;
-    return days.filter((day) =>
-      isFirstTimeDayAllowed(firstTimeRule, parseLocalDateKey(day.date).getDay()),
-    );
-  }, [days, firstTimeRule]);
+    const slug = selectedService?.slug;
+    return days.filter((day) => {
+      if (!isFirstTimeDayAllowed(firstTimeRule, parseLocalDateKey(day.date).getDay())) {
+        return false;
+      }
+      if (slug && isFirstTimeDateBlocked(slug, day.date)) return false;
+      return true;
+    });
+  }, [days, firstTimeRule, selectedService]);
 
   // ── Filtrado de slots por la ventana del primer turno ──────────────────
   const filteredSlots = React.useMemo(() => {
     if (!firstTimeRule || !selectedDate) return slots;
+    // Defensa en profundidad: si la fecha está bloqueada para el primer turno,
+    // ningún horario es reservable (aunque el día ya no debería ofrecerse).
+    const slug = selectedService?.slug;
+    if (slug && isFirstTimeDateBlocked(slug, selectedDate)) {
+      return slots.map((slot) => ({ ...slot, available: false, isBlocked: true }));
+    }
     const dayOfWeek = parseLocalDateKey(selectedDate).getDay();
     return slots.map((slot) => {
       const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
@@ -145,7 +160,7 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
       }
       return slot;
     });
-  }, [slots, firstTimeRule, selectedDate]);
+  }, [slots, firstTimeRule, selectedDate, selectedService]);
 
   // ── Fetch de días cuando cambia el servicio ────────────────────────────
   const fetchDays = React.useCallback(async (serviceId: string) => {

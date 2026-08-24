@@ -12,6 +12,8 @@
  * refleja.
  */
 
+import { formatDateKey } from "@/lib/datetime";
+
 /**
  * Cortes horarios reutilizables. Ventana [startHour, endHour) sobre la hora de
  * inicio del bloque (24h).
@@ -80,6 +82,57 @@ export const FIRST_TIME_RULE_SLUGS = Object.keys(FIRST_TIME_RULES);
 
 /** Slug interno de Kinesiología (estable; el nombre visible es "Kinesiología"). */
 export const KINESIO_SLUG = "rehab";
+
+// ── Excepciones puntuales por FECHA (bloqueo de PRIMER turno) ─────────────────
+
+/** Sustantivo del servicio para los mensajes al primerizo (por slug estable). */
+const FIRST_TIME_SERVICE_NOUN: Record<string, string> = {
+  rehab: "kinesiología",
+  gym: "gimnasio",
+};
+
+/**
+ * Excepciones puntuales por FECHA: días en los que NO se ofrece ni se permite el
+ * PRIMER turno de un servicio (SOLO a primerizos —quienes aún no asistieron—).
+ * Clave = slug estable del servicio; valor = fechas "YYYY-MM-DD" en hora de
+ * Argentina.
+ *
+ * - Auto-expira: pasada la fecha deja de afectar sola (la disponibilidad solo
+ *   mira días futuros); no hay que borrar nada.
+ * - No es un `if` con la fecha suelta: es una lista configurable y reusable.
+ * - NO afecta a no-primerizos, ni a otros servicios, ni a otros días, ni a la
+ *   carga manual del profesional (adminBook).
+ */
+export const FIRST_TIME_BLOCKED_DATES: Record<string, string[]> = {
+  // Miércoles 26/08/2026: sin primeros turnos online de Kine ni GYM.
+  rehab: ["2026-08-26"],
+  gym: ["2026-08-26"],
+};
+
+/**
+ * ¿La fecha (clave "YYYY-MM-DD" en hora Argentina) está bloqueada para el PRIMER
+ * turno de ese servicio? `dateKey` debe venir ya en hora local (ver `TIMEZONE`),
+ * no en UTC, para no bloquear el día equivocado en el borde de medianoche.
+ */
+export function isFirstTimeDateBlocked(
+  slug: string | null | undefined,
+  dateKey: string,
+): boolean {
+  if (!slug) return false;
+  const dates = FIRST_TIME_BLOCKED_DATES[slug];
+  return Array.isArray(dates) && dates.includes(dateKey);
+}
+
+/**
+ * Mensaje claro y amable para el primerizo cuando su fecha está bloqueada. El
+ * día se muestra en hora de Argentina (formateo de fecha-clave, sin correr el
+ * día). Ej: "Los primeros turnos de kinesiología no están disponibles el
+ * miércoles 26 de agosto de 2026. Podés elegir otro día."
+ */
+export function firstTimeBlockedMessage(slug: string, dateKey: string): string {
+  const noun = FIRST_TIME_SERVICE_NOUN[slug] ?? "este servicio";
+  return `Los primeros turnos de ${noun} no están disponibles el ${formatDateKey(dateKey)}. Podés elegir otro día.`;
+}
 
 /** Devuelve la regla del servicio (por slug), o `null` si no tiene. */
 export function getFirstTimeRule(slug: string | null | undefined): FirstTimeRule | null {
