@@ -2,8 +2,6 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import {
   AlertTriangle,
   CalendarCheck,
@@ -19,6 +17,7 @@ import {
   cancelBookingAction,
   getMySameDayBookingsAction,
 } from "@/app/(patient)/actions";
+import { DayPicker } from "@/components/features/day-picker";
 import { SameDayWarning } from "@/components/features/same-day-warning";
 import { SlotGrid } from "@/components/features/slot-grid";
 import {
@@ -394,49 +393,14 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
                 : "No hay días disponibles para este servicio."}
             </p>
           ) : (
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {filteredDays.map((day) => {
-                const d = parseLocalDateKey(day.date);
-                const active = selectedDate === day.date;
-                const soldOut = day.availableSlots === 0;
-                return (
-                  <button
-                    key={day.date}
-                    type="button"
-                    onClick={() => selectDay(day.date)}
-                    aria-pressed={active}
-                    className={cn(
-                      "flex min-w-[4.5rem] flex-col items-center gap-0.5 rounded-lg border px-3 py-2 shadow-e1 transition-all duration-150 ease-out-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      active
-                        ? "border-primary bg-primary text-primary-foreground shadow-e2"
-                        : "hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-e2",
-                    )}
-                  >
-                    <span className="text-[0.7rem] font-medium uppercase">
-                      {format(d, "EEE", { locale: es })}
-                    </span>
-                    <span className="text-lg font-semibold tabular-nums leading-none">
-                      {format(d, "d")}
-                    </span>
-                    <span className="text-[0.7rem] font-medium capitalize -mt-0.5">
-                      {format(d, "MMM", { locale: es }).replace(/\.$/, "")}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[0.7rem]",
-                        active
-                          ? "text-primary-foreground/85"
-                          : soldOut
-                            ? "text-muted-foreground"
-                            : "text-primary",
-                      )}
-                    >
-                      {soldOut ? "lleno" : `${day.availableSlots} libres`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <DayPicker
+              days={filteredDays.map((day) => ({
+                date: day.date,
+                availableCount: day.availableSlots,
+              }))}
+              selectedDate={selectedDate}
+              onSelect={selectDay}
+            />
           )}
         </CardContent>
       </Card>

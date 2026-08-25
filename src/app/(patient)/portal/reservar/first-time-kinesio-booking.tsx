@@ -11,9 +11,10 @@ import {
 } from "@/app/(patient)/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DayPicker } from "@/components/features/day-picker";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDateKey, formatDateKeyShort } from "@/lib/datetime";
+import { formatDateKey } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 interface Turno {
@@ -80,9 +81,9 @@ export function FirstTimeKinesioBooking() {
       <Card>
         <CardContent className="space-y-3 p-5 sm:p-6">
           <Skeleton className="h-5 w-48" />
-          <div className="flex gap-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-20 rounded-lg" />
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-[5.5rem] w-[4.5rem] shrink-0 rounded-lg" />
             ))}
           </div>
         </CardContent>
@@ -123,27 +124,19 @@ export function FirstTimeKinesioBooking() {
       <CardContent className="space-y-4 p-5 sm:p-6">
         <div>
           <p className="text-sm font-medium">Elegí el día</p>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
-            {days.map((d) => {
-              const active = selectedDate === d.date;
-              return (
-                <button
-                  key={d.date}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDate(d.date);
-                    setSelected(null);
-                  }}
-                  aria-pressed={active}
-                  className={cn(
-                    "flex shrink-0 flex-col items-center rounded-lg border px-3 py-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
-                  )}
-                >
-                  <span className="text-xs font-medium capitalize">{formatDateKeyShort(d.date)}</span>
-                </button>
-              );
-            })}
+          <div className="mt-2">
+            <DayPicker
+              days={days.map((d) => ({
+                date: d.date,
+                // "Libres" = turnos de 40 min disponibles ese día (individuales).
+                availableCount: d.turnos.filter((t) => t.available).length,
+              }))}
+              selectedDate={selectedDate}
+              onSelect={(date) => {
+                setSelectedDate(date);
+                setSelected(null);
+              }}
+            />
           </div>
         </div>
 
