@@ -58,12 +58,13 @@ const STATUS_META: Record<
 
 interface Props {
   services: ServiceOption[];
+  esPrimeraVez: boolean;
   restrictedSlugs: string[];
   todayKey: string;
   defaultToDate: string;
 }
 
-export function SeriesBuilder({ services, restrictedSlugs, todayKey, defaultToDate }: Props) {
+export function SeriesBuilder({ services, esPrimeraVez, restrictedSlugs, todayKey, defaultToDate }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
