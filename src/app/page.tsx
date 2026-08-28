@@ -17,6 +17,7 @@ import {
 import { BrandMark } from "@/components/shared/brand-mark";
 import { Button } from "@/components/ui/button";
 import { PublicHeader } from "@/components/shared/public-header";
+import { ServicesAccordion } from "@/components/shared/services-accordion";
 
 const features = [
   {
@@ -142,7 +143,7 @@ export default function HomePage() {
               </p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-6 lg:gap-8 stagger-children">
+            <div className="hidden md:grid grid-cols-1 md:grid-cols-6 gap-6 lg:gap-8 stagger-children">
               
               {/* GYM */}
               <div className="md:col-span-2 group relative overflow-hidden rounded-2xl border border-border/40 bg-card p-10 shadow-sm hover:shadow-xl transition-all duration-300">
@@ -211,6 +212,9 @@ export default function HomePage() {
               </div>
 
             </div>
+            
+            {/* Mobile Services Accordion */}
+            <ServicesAccordion />
           </div>
         </section>
 

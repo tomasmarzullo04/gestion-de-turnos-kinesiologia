@@ -209,7 +209,19 @@
   }
 
   .animate-marquee {
-    animation: marquee 30s linear infinite;
+    animation: marquee 18s linear infinite;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .animate-marquee:hover {
+      animation-play-state: paused;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-marquee {
+      animation-play-state: paused;
+    }
   }
 
   @keyframes pulse-glow {
