@@ -96,7 +96,7 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
   const [items, setItems] = React.useState<AttendanceSlot[]>(slots);
   const [query, setQuery] = React.useState("");
   const [cancelTarget, setCancelTarget] = React.useState<CancelTarget | null>(null);
-  const [isPending, startTransition] = React.useTransition();
+  const [pendingRows, setPendingRows] = React.useState<Set<string>>(new Set());
 
   const day = parseLocalDateKey(selectedDate);
 
@@ -105,25 +105,33 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
   }
 
   function mark(bookingId: string, status: AttendanceStatus) {
-    // Optimistic: actualizamos al instante.
-    setItems((prev) =>
-      prev.map((slot) => ({
-        ...slot,
-        attendees: slot.attendees.map((a) =>
-          a.bookingId === bookingId ? { ...a, status } : a,
-        ),
-      })),
-    );
-    startTransition(async () => {
-      const result = await markAttendanceAction({ bookingId, status });
-      if (result.success) {
-        toast.success(`Marcado: ${ATTENDANCE_STATUS_LABELS[status]}`);
-      } else {
-        toast.error(result.error);
-        // Revertimos a la verdad del servidor.
-        router.refresh();
-      }
-    });
+    setPendingRows((prev) => new Set(prev).add(bookingId));
+    
+    // Ejecutar mutation directamente sin startTransition para no bloquear toda la tabla,
+    // o podríamos usar async normal ya que manejamos pendingRows nosotros.
+    markAttendanceAction({ bookingId, status })
+      .then((result) => {
+        if (result.success) {
+          toast.success(`Marcado: ${ATTENDANCE_STATUS_LABELS[status]}`);
+          setItems((prev) =>
+            prev.map((slot) => ({
+              ...slot,
+              attendees: slot.attendees.map((a) =>
+                a.bookingId === bookingId ? { ...a, status } : a,
+              ),
+            })),
+          );
+        } else {
+          toast.error(result.error);
+        }
+      })
+      .finally(() => {
+        setPendingRows((prev) => {
+          const next = new Set(prev);
+          next.delete(bookingId);
+          return next;
+        });
+      });
   }
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -313,12 +321,13 @@ export function AttendanceClient({ selectedDate, todayKey, slots }: Props) {
                           <div className="flex shrink-0 items-center gap-2">
                             <AttendanceControl
                               value={a.status}
-                              disabled={isPending}
+                              disabled={pendingRows.has(a.bookingId)}
                               onChange={(status) => mark(a.bookingId, status)}
                             />
                             <Button
                               variant="ghost"
                               size="icon"
+                              disabled={pendingRows.has(a.bookingId)}
                               aria-label={`Eliminar turno de ${a.name}`}
                               className="text-muted-foreground hover:text-destructive"
                               onClick={() =>

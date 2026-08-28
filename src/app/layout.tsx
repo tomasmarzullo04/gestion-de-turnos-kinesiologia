@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { FloatingContactButton } from "@/components/shared/floating-contact-button";
 import "./globals.css";
 
 // Body: Inter (sans humanista, legible). Títulos: Geist (display) → expone
@@ -47,6 +48,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster position="top-right" richColors closeButton />
+          <FloatingContactButton />
         </ThemeProvider>
       </body>
     </html>

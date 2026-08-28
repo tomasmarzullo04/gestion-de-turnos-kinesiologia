@@ -51,23 +51,23 @@ export function MobileNav({ nav, homeHref, footer }: Props) {
         />
         <Dialog.Content
           aria-label="Navegación"
-          className="fixed inset-y-0 left-0 z-50 flex h-full w-[17rem] max-w-[85vw] flex-col bg-[#1b3a5b] text-white shadow-2xl duration-300 ease-out-soft focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left motion-reduce:animate-none motion-reduce:duration-0 lg:hidden"
+          className="fixed inset-y-0 left-0 z-50 flex h-full w-[17rem] max-w-[85vw] flex-col bg-[#1b3a5b] dark:bg-card text-white dark:text-card-foreground shadow-2xl duration-300 ease-out-soft focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left motion-reduce:animate-none motion-reduce:duration-0 lg:hidden"
         >
           <Dialog.Title className="sr-only">Menú de navegación</Dialog.Title>
 
           {/* Logo + cerrar */}
-          <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+          <div className="flex h-16 items-center justify-between border-b border-white/10 dark:border-border/40 px-4">
             <Link
               href={homeHref}
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 font-display text-lg font-semibold tracking-tight text-white"
+              className="flex items-center gap-2 font-display text-lg font-semibold tracking-tight text-white dark:text-foreground"
             >
-              <BrandMark className="h-9 w-9" animate={false} />
+              <BrandMark className="h-9 w-9 text-white dark:text-primary" animate={false} />
               <span>Apex</span>
             </Link>
             <Dialog.Close
               aria-label="Cerrar menú"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5b9bd5]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 dark:text-muted-foreground transition-colors hover:bg-white/10 dark:hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5b9bd5] dark:focus-visible:ring-ring"
             >
               <X className="h-5 w-5" />
             </Dialog.Close>
@@ -84,10 +84,10 @@ export function MobileNav({ nav, homeHref, footer }: Props) {
                   onClick={() => setOpen(false)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5b9bd5]",
+                    "flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5b9bd5] dark:focus-visible:ring-ring",
                     active
-                      ? "bg-[#5b9bd5] text-[#0f2438] shadow-sm"
-                      : "text-white/80 hover:bg-white/10 hover:text-white",
+                      ? "bg-[#5b9bd5] dark:bg-secondary/10 text-[#0f2438] dark:text-secondary shadow-sm"
+                      : "text-white/80 dark:text-muted-foreground hover:bg-white/10 dark:hover:bg-muted hover:text-white dark:hover:text-foreground",
                   )}
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
@@ -98,7 +98,7 @@ export function MobileNav({ nav, homeHref, footer }: Props) {
           </nav>
 
           {footer && (
-            <div className="border-t border-white/10 px-4 py-4 text-xs text-white/60">
+            <div className="border-t border-white/10 dark:border-border/40 px-4 py-4 text-xs text-white/60 dark:text-muted-foreground/60">
               {footer}
             </div>
           )}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, CheckCircle, Clock, LayoutGrid, Users } from "lucide-react";
+import { CalendarClock, CheckCircle, Clock, LayoutGrid, Users, Loader2 } from "lucide-react";
+import { Suspense } from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -14,6 +15,61 @@ import { AttendanceTrendChart } from "@/components/admin/charts/attendance-trend
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
+
+async function AdminCharts({ todayKey }: { todayKey: string }) {
+  const [occupancyBySlot, attendanceTrend] = await Promise.all([
+    analyticsService.getOccupancyBySlot(todayKey),
+    analyticsService.getAttendanceTrend(todayKey, 7),
+  ]);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <OccupancyBarChart data={occupancyBySlot} />
+      <AttendanceTrendChart data={attendanceTrend} />
+    </div>
+  );
+}
+
+function ChartsSkeleton() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="h-[350px] rounded-2xl border border-border/50 bg-card/30 flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/50" />
+      </div>
+      <div className="h-[350px] rounded-2xl border border-border/50 bg-card/30 flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/50" />
+      </div>
+    </div>
+  );
+}
+
+async function AdminPeakHours({ todayKey }: { todayKey: string }) {
+  const peakHours = await analyticsService.getPeakHours(todayKey, 30);
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      {peakHours.map((ph, i) => (
+        <StatCard
+          key={ph.time}
+          label={i === 0 ? "Horario más demandado" : `Horario pico #${i + 1}`}
+          value={ph.time}
+          icon={Clock}
+          hint={`${Math.round(ph.avgOccupancy)}% ocupación prom. (30 días)`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PeakHoursSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="h-28 rounded-2xl border border-border/50 bg-card/30 animate-pulse" />
+      ))}
+    </div>
+  );
+}
 
 export default async function AdminDashboardPage() {
   const days = await slotService.getUpcomingDays();
@@ -41,17 +97,8 @@ export default async function AdminDashboardPage() {
     );
   }
 
-  const [
-    dailyKPIs,
-    occupancyBySlot,
-    attendanceTrend,
-    peakHours,
-    weeklyComparison
-  ] = await Promise.all([
+  const [dailyKPIs, weeklyComparison] = await Promise.all([
     analyticsService.getDailyKPIs(todayKey),
-    analyticsService.getOccupancyBySlot(todayKey),
-    analyticsService.getAttendanceTrend(todayKey, 7),
-    analyticsService.getPeakHours(todayKey, 30),
     analyticsService.getWeeklyComparison(todayKey)
   ]);
 
@@ -97,24 +144,14 @@ export default async function AdminDashboardPage() {
         />
       </div>
 
-      {/* Gráficos */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <OccupancyBarChart data={occupancyBySlot} />
-        <AttendanceTrendChart data={attendanceTrend} />
-      </div>
+      {/* Gráficos y Métricas Históricas */}
+      <Suspense fallback={<ChartsSkeleton />}>
+        <AdminCharts todayKey={todayKey} />
+      </Suspense>
 
-      {/* Horarios Pico */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {peakHours.map((ph, i) => (
-          <StatCard
-            key={ph.time}
-            label={i === 0 ? "Horario más demandado" : `Horario pico #${i + 1}`}
-            value={ph.time}
-            icon={Clock}
-            hint={`${Math.round(ph.avgOccupancy)}% ocupación prom. (30 días)`}
-          />
-        ))}
-      </div>
+      <Suspense fallback={<PeakHoursSkeleton />}>
+        <AdminPeakHours todayKey={todayKey} />
+      </Suspense>
     </div>
   );
 }
