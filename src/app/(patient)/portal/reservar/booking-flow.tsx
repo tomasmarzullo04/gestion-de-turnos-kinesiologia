@@ -53,6 +53,7 @@ interface Props {
   initialSlots: SlotView[];
   /** El paciente nunca tuvo un turno de REHAB confirmado → aplica la ventana. */
   esPrimerRehab: boolean;
+  esPrimeraVez: boolean;
   /** Patrón semanal por servicio (id → días/horarios/cupos) para el cartel. */
   schedules: Record<string, ScheduleEntry[]>;
 }
@@ -81,7 +82,15 @@ const StepHeader = React.memo(function StepHeader({
   );
 });
 
-export function BookingFlow({ services, days: initialDays, initialDate, initialSlots, esPrimerRehab, schedules }: Props) {
+export function BookingFlow({ 
+  services, 
+  days: initialDays, 
+  initialDate, 
+  initialSlots, 
+  esPrimerRehab, 
+  esPrimeraVez,
+  schedules 
+}: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
@@ -123,20 +132,31 @@ export function BookingFlow({ services, days: initialDays, initialDate, initialS
     });
   }, [days, restrictRehab]);
 
-  // ── Filtrado de slots por la ventana del primer REHAB ──────────────────
+  // ── Filtrado de slots por reglas ───────────────────────────────────────
   const filteredSlots = React.useMemo(() => {
-    if (!restrictRehab || !selectedDate) return slots;
-    const d = parseLocalDateKey(selectedDate);
-    const dayOfWeek = d.getDay();
     return slots.map((slot) => {
-      const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
-      const allowed = isRehabFirstTimeSlotAllowed(dayOfWeek, hour);
-      if (!allowed) {
-        return { ...slot, available: false, isBlocked: true };
+      let available = slot.available;
+      let isBlocked = slot.isBlocked;
+      
+      // 1. Bloqueo de primera vez (general para cualquier servicio)
+      if (slot.firstTimeBlocked && esPrimeraVez) {
+        available = false;
+        isBlocked = true;
       }
-      return slot;
+      
+      // 2. Regla de ventana para el primer REHAB
+      if (restrictRehab && selectedDate) {
+        const d = parseLocalDateKey(selectedDate);
+        const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
+        if (!isRehabFirstTimeSlotAllowed(d.getDay(), hour)) {
+          available = false;
+          isBlocked = true;
+        }
+      }
+      
+      return { ...slot, available, isBlocked };
     });
-  }, [slots, restrictRehab, selectedDate]);
+  }, [slots, restrictRehab, selectedDate, esPrimeraVez]);
 
   // ── Fetch de días cuando cambia el servicio ────────────────────────────
   const fetchDays = React.useCallback(async (serviceId: string) => {

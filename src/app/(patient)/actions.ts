@@ -162,6 +162,10 @@ export async function bookSeriesAction(
       return fail(`Demasiadas series seguidas. Reintentá en ${limit.retryAfter}s.`);
     }
 
+    // Obtener estado de primera vez del paciente
+    const profile = await patientService.getPatientProfile(user.id);
+    const esPrimeraVez = profile?.esPrimeraVez ?? false;
+
     const data = bookSeriesSchema.parse(input);
     const result = await bookingService.bookSeries({
       userId: user.id,
@@ -170,6 +174,7 @@ export async function bookSeriesAction(
       startTime: data.startTime,
       toDate: data.toDate,
       notes: data.notes || null,
+      esPrimeraVez,
     });
 
     // Evento appointment.series.confirmed: una sola notificación con TODAS las

@@ -9,6 +9,7 @@ import { serviceService } from "@/server/services/service.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
 import { generationService } from "@/server/services/generation.service";
 import { bookingService } from "@/server/services/booking.service";
+import { patientService } from "@/server/services/patient.service";
 
 export const metadata: Metadata = { title: "Reservar turno" };
 export const dynamic = "force-dynamic";
@@ -25,16 +26,18 @@ export default async function BookingPage() {
     // Nunca bloquear la reserva por el mantenimiento de la ventana.
   }
 
-  const [days, services, rehabLibre, schedules] = await Promise.all([
+  const [days, services, rehabLibre, schedules, profile] = await Promise.all([
     slotService.getUpcomingDays(),
     serviceService.listActive(),
     bookingService.puedeReservarRehabLibre(user.id),
     slotTemplateService.activeScheduleByService(),
+    patientService.getPatientProfile(user.id),
   ]);
 
   // La restricción de horarios de REHAB se mantiene hasta que el paciente
   // asistió a una sesión (asistencia PRESENT). No afecta a otros servicios.
   const esPrimerRehab = !rehabLibre;
+  const esPrimeraVez = profile?.esPrimeraVez ?? false;
 
   // Fecha de hoy y último día del mes (default para el "turno fijo").
   const todayKey = toLocalDateKey(new Date());
@@ -54,6 +57,7 @@ export default async function BookingPage() {
         services={services}
         days={days}
         esPrimerRehab={esPrimerRehab}
+        esPrimeraVez={esPrimeraVez}
         todayKey={todayKey}
         defaultToDate={defaultToDate}
         schedules={schedules}

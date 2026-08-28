@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Ban,
   CalendarClock,
   CalendarDays,
   CalendarPlus,
@@ -33,6 +34,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Asistencias", href: "/admin/asistencias", icon: ClipboardCheck },
   { label: "Cargar turno", href: "/admin/cargar-turno", icon: CalendarPlus },
   { label: "Plantillas", href: "/admin/plantillas", icon: CalendarClock },
+  { label: "Bloqueos", href: "/admin/bloqueos", icon: Ban },
   { label: "Pacientes", href: "/admin/pacientes", icon: Users },
   { label: "Finanzas", href: "/admin/finanzas", icon: Wallet },
   { label: "Profesionales", href: "/admin/profesionales", icon: Stethoscope },

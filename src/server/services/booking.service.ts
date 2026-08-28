@@ -17,6 +17,7 @@ import { parseLocalDateKey, toLocalDateKey } from "@/lib/datetime";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { BusinessError } from "@/server/errors";
+import { blockService } from "@/server/services/block.service";
 
 /**
  * Capa de servicio de reservas — LO CRÍTICO.
@@ -116,6 +117,21 @@ export const bookingService = {
     const slot = check[0]!;
     if (!slot.is_future) {
       throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
+    }
+
+    // ── Bloqueos de la tabla blocks (grano grueso) ──────────────────────
+    const blockCheck = await blockService.checkSlot(
+      slot.date,
+      slot.start_time,
+      slot.service_id,
+    );
+    if (blockCheck.totalBlocked) {
+      throw new BusinessError("Esa franja está bloqueada y no admite reservas.");
+    }
+    if (blockCheck.firstTimeBlocked && esPrimeraVez) {
+      throw new BusinessError(
+        "Esa franja no está disponible para tu primer turno. Probá con otro horario.",
+      );
     }
 
     // ── Regla acotada: PRIMER turno de REHAB ──────────────────────────────
@@ -480,8 +496,9 @@ export const bookingService = {
     startTime: string;
     toDate: string;
     notes?: string | null;
+    esPrimeraVez?: boolean;
   }): Promise<SeriesResult> {
-    const { userId, serviceId, daysOfWeek, startTime, toDate, notes } = params;
+    const { userId, serviceId, daysOfWeek, startTime, toDate, notes, esPrimeraVez } = params;
 
     // Guardia: la columna recurrence_id debe existir (migración aplicada).
     try {
@@ -538,6 +555,17 @@ export const bookingService = {
 
       if (isRehab && !rehabLibre && !isRehabFirstTimeSlotAllowed(slot.dow, slot.hour)) {
         results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "rehab_window" });
+        continue;
+      }
+
+      // Bloqueos de la tabla blocks (grano grueso).
+      const seriesBlock = await blockService.checkSlot(
+        dateKey,
+        startTime,
+        serviceId,
+      );
+      if (seriesBlock.totalBlocked || (seriesBlock.firstTimeBlocked && esPrimeraVez)) {
+        results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "no_slot" });
         continue;
       }
 

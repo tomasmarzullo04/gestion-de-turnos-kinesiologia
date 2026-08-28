@@ -8,6 +8,7 @@ import { fail, fromError, ok } from "@/lib/action-result";
 import { assertRole } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { createBlockSchema, deleteBlockSchema } from "@/lib/validations/block";
 import { markAttendanceSchema } from "@/lib/validations/attendance";
 import { professionalSchema } from "@/lib/validations/professional";
 import { slotTemplateSchema } from "@/lib/validations/slot-template";
@@ -34,6 +35,7 @@ import { patientService } from "@/server/services/patient.service";
 import { professionalService } from "@/server/services/professional.service";
 import { slotService } from "@/server/services/slot.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
+import { blockService, type BlockView } from "@/server/services/block.service";
 import { type ActionResult } from "@/types";
 
 // ── Plantillas (única fuente de verdad: cada cambio re-sincroniza las franjas) ──
@@ -405,6 +407,51 @@ export async function updateCopagoAmountAction(
     const { amount } = updateCopagoAmountSchema.parse(input);
     await paymentService.setCopagoAmount(amount);
     revalidatePayments();
+    return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+// ── Bloqueos de agenda ───────────────────────────────────────────────────
+function revalidateBlocks(): void {
+  revalidatePath("/admin/bloqueos");
+  revalidatePath("/admin");
+  revalidatePath("/portal/reservar");
+}
+
+export async function listActiveBlocksAction(): Promise<ActionResult<BlockView[]>> {
+  try {
+    await assertRole(ROLES.ADMIN);
+    const blocks = await blockService.listActive();
+    return ok(blocks);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function createBlockAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const data = createBlockSchema.parse(input);
+    const result = await blockService.create(data, pro.id);
+    revalidateBlocks();
+    return ok(result);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+export async function deleteBlockAction(
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const { blockId } = deleteBlockSchema.parse(input);
+    await blockService.remove(blockId, pro.id);
+    revalidateBlocks();
     return ok(undefined);
   } catch (error) {
     return fromError(error);

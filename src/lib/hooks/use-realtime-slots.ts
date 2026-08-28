@@ -43,12 +43,15 @@ export function useRealtimeSlots(
             prev.map((s) => {
               if (s.id !== row.id) return s;
               const remaining = row.capacity - row.booked_count;
-              const available = !row.is_blocked && remaining > 0 && !s.isPast;
+              // El is_blocked del Realtime solo refleja el flag del slot individual.
+              // Los bloqueos de la tabla `blocks` (has_total_block, firstTimeBlocked)
+              // se resolvieron en el SSR/fetch inicial y se preservan vía spread.
+              const available = !row.is_blocked && !s.firstTimeBlocked && remaining > 0 && !s.isPast;
               return {
                 ...s,
                 capacity: row.capacity,
                 bookedCount: row.booked_count,
-                isBlocked: row.is_blocked,
+                isBlocked: row.is_blocked || s.isBlocked,
                 remaining,
                 available,
                 lowSlots:

@@ -27,6 +27,8 @@ export interface SlotView {
   serviceId: string | null;
   serviceName: string | null;
   serviceColor: string | null;
+  /** true si hay un bloqueo FIRST_TIME activo (primerizos no pueden reservar). */
+  firstTimeBlocked: boolean;
 }
 
 export interface SlotAttendee {
@@ -52,11 +54,14 @@ interface RawSlot {
   service_id: string | null;
   service_name: string | null;
   service_color: string | null;
+  has_total_block: boolean;
+  has_first_time_block: boolean;
 }
 
 function toSlotView(r: RawSlot): SlotView {
   const remaining = r.capacity - r.booked_count;
-  const available = !r.is_blocked && remaining > 0 && !r.is_past;
+  const blocked = r.is_blocked || r.has_total_block;
+  const available = !blocked && remaining > 0 && !r.is_past;
   return {
     id: r.id,
     startTime: r.start_time,
@@ -64,20 +69,51 @@ function toSlotView(r: RawSlot): SlotView {
     capacity: r.capacity,
     bookedCount: r.booked_count,
     remaining,
-    isBlocked: r.is_blocked,
+    isBlocked: blocked,
     isPast: r.is_past,
     available,
     lowSlots: available && remaining <= BOOKING_CONFIG.lowSlotsThreshold,
     serviceId: r.service_id,
     serviceName: r.service_name,
     serviceColor: r.service_color,
+    firstTimeBlocked: r.has_first_time_block,
   };
 }
+
+// ── Subconsultas reutilizables para bloqueos de la tabla blocks ────────────
+// Estas expresiones se inyectan en los SELECT de las queries de slots.
+// Verifican si existe un bloqueo activo (no eliminado) que matchea la franja.
+const TOTAL_BLOCK_EXISTS = `
+  EXISTS (
+    SELECT 1 FROM blocks b
+    WHERE b.deleted_at IS NULL
+      AND b.block_type = 'TOTAL'
+      AND s.date BETWEEN b.date_from AND b.date_to
+      AND (b.service_id IS NULL OR b.service_id = s.service_id)
+      AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+      AND (b.time_to IS NULL OR s.start_time < b.time_to)
+  )
+`;
+
+const FIRST_TIME_BLOCK_EXISTS = `
+  EXISTS (
+    SELECT 1 FROM blocks b
+    WHERE b.deleted_at IS NULL
+      AND b.block_type = 'FIRST_TIME'
+      AND s.date BETWEEN b.date_from AND b.date_to
+      AND (b.service_id IS NULL OR b.service_id = s.service_id)
+      AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+      AND (b.time_to IS NULL OR s.start_time < b.time_to)
+  )
+`;
 
 export const slotService = {
   /**
    * Próximos días (hasta el horizonte) que tienen franjas futuras.
    * Si se pasa `serviceId`, filtra solo las franjas de ese servicio.
+   *
+   * Los bloqueos TOTAL de la tabla `blocks` se combinan con `is_blocked`
+   * del slot para no contar esas franjas como disponibles.
    */
   async getUpcomingDays(serviceId?: string | null): Promise<DayAvailability[]> {
     const serviceFilter = serviceId
@@ -86,7 +122,17 @@ export const slotService = {
         >`
         SELECT s.date::text AS date,
                count(*) FILTER (
-                 WHERE NOT s.is_blocked AND s.booked_count < s.capacity
+                 WHERE NOT s.is_blocked
+                   AND s.booked_count < s.capacity
+                   AND NOT EXISTS (
+                     SELECT 1 FROM blocks b
+                     WHERE b.deleted_at IS NULL
+                       AND b.block_type = 'TOTAL'
+                       AND s.date BETWEEN b.date_from AND b.date_to
+                       AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                       AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                       AND (b.time_to IS NULL OR s.start_time < b.time_to)
+                   )
                ) AS available_slots,
                count(*) AS total_slots
         FROM slots s
@@ -102,7 +148,17 @@ export const slotService = {
         >`
         SELECT s.date::text AS date,
                count(*) FILTER (
-                 WHERE NOT s.is_blocked AND s.booked_count < s.capacity
+                 WHERE NOT s.is_blocked
+                   AND s.booked_count < s.capacity
+                   AND NOT EXISTS (
+                     SELECT 1 FROM blocks b
+                     WHERE b.deleted_at IS NULL
+                       AND b.block_type = 'TOTAL'
+                       AND s.date BETWEEN b.date_from AND b.date_to
+                       AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                       AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                       AND (b.time_to IS NULL OR s.start_time < b.time_to)
+                   )
                ) AS available_slots,
                count(*) AS total_slots
         FROM slots s
@@ -124,6 +180,9 @@ export const slotService = {
   /**
    * Franjas de un día (clave "YYYY-MM-DD") con cupos restantes y estado.
    * Si se pasa `serviceId`, filtra solo las franjas de ese servicio.
+   *
+   * Cada franja incluye `has_total_block` y `has_first_time_block` de la
+   * tabla `blocks`, combinados con `is_blocked` del slot en `toSlotView`.
    */
   async getSlotsForDate(dateKey: string, serviceId?: string | null): Promise<SlotView[]> {
     const rows = serviceId
@@ -135,7 +194,25 @@ export const slotService = {
                  (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past,
                  s.service_id,
                  sv.name AS service_name,
-                 sv.color AS service_color
+                 sv.color AS service_color,
+                 EXISTS (
+                   SELECT 1 FROM blocks b
+                   WHERE b.deleted_at IS NULL
+                     AND b.block_type = 'TOTAL'
+                     AND s.date BETWEEN b.date_from AND b.date_to
+                     AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                     AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                     AND (b.time_to IS NULL OR s.start_time < b.time_to)
+                 ) AS has_total_block,
+                 EXISTS (
+                   SELECT 1 FROM blocks b
+                   WHERE b.deleted_at IS NULL
+                     AND b.block_type = 'FIRST_TIME'
+                     AND s.date BETWEEN b.date_from AND b.date_to
+                     AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                     AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                     AND (b.time_to IS NULL OR s.start_time < b.time_to)
+                 ) AS has_first_time_block
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date
@@ -150,7 +227,25 @@ export const slotService = {
                  (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past,
                  s.service_id,
                  sv.name AS service_name,
-                 sv.color AS service_color
+                 sv.color AS service_color,
+                 EXISTS (
+                   SELECT 1 FROM blocks b
+                   WHERE b.deleted_at IS NULL
+                     AND b.block_type = 'TOTAL'
+                     AND s.date BETWEEN b.date_from AND b.date_to
+                     AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                     AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                     AND (b.time_to IS NULL OR s.start_time < b.time_to)
+                 ) AS has_total_block,
+                 EXISTS (
+                   SELECT 1 FROM blocks b
+                   WHERE b.deleted_at IS NULL
+                     AND b.block_type = 'FIRST_TIME'
+                     AND s.date BETWEEN b.date_from AND b.date_to
+                     AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                     AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                     AND (b.time_to IS NULL OR s.start_time < b.time_to)
+                 ) AS has_first_time_block
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date
@@ -176,7 +271,25 @@ export const slotService = {
              (((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) <= now()) AS is_past,
              s.service_id,
              sv.name AS service_name,
-             sv.color AS service_color
+             sv.color AS service_color,
+             EXISTS (
+               SELECT 1 FROM blocks b
+               WHERE b.deleted_at IS NULL
+                 AND b.block_type = 'TOTAL'
+                 AND s.date BETWEEN b.date_from AND b.date_to
+                 AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                 AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                 AND (b.time_to IS NULL OR s.start_time < b.time_to)
+             ) AS has_total_block,
+             EXISTS (
+               SELECT 1 FROM blocks b
+               WHERE b.deleted_at IS NULL
+                 AND b.block_type = 'FIRST_TIME'
+                 AND s.date BETWEEN b.date_from AND b.date_to
+                 AND (b.service_id IS NULL OR b.service_id = s.service_id)
+                 AND (b.time_from IS NULL OR s.start_time >= b.time_from)
+                 AND (b.time_to IS NULL OR s.start_time < b.time_to)
+             ) AS has_first_time_block
       FROM slots s
       LEFT JOIN services sv ON sv.id = s.service_id
       WHERE s.date = ${dateKey}::date

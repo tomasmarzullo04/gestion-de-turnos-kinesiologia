@@ -13,12 +13,13 @@ interface Props {
   services: ServiceOption[];
   days: DayAvailability[];
   esPrimerRehab: boolean;
+  esPrimeraVez: boolean;
   todayKey: string;
   defaultToDate: string;
   schedules: Record<string, ScheduleEntry[]>;
 }
 
-export function ReservarTabs({ services, days, esPrimerRehab, todayKey, defaultToDate, schedules }: Props) {
+export function ReservarTabs({ services, days, esPrimerRehab, esPrimeraVez, todayKey, defaultToDate, schedules }: Props) {
   return (
     <Tabs defaultValue="single" className="space-y-4">
       <TabsList>
@@ -39,6 +40,7 @@ export function ReservarTabs({ services, days, esPrimerRehab, todayKey, defaultT
           initialDate={null}
           initialSlots={[]}
           esPrimerRehab={esPrimerRehab}
+          esPrimeraVez={esPrimeraVez}
           schedules={schedules}
         />
       </TabsContent>
@@ -47,6 +49,7 @@ export function ReservarTabs({ services, days, esPrimerRehab, todayKey, defaultT
         <SeriesBuilder
           services={services}
           esPrimerRehab={esPrimerRehab}
+          esPrimeraVez={esPrimeraVez}
           todayKey={todayKey}
           defaultToDate={defaultToDate}
         />
