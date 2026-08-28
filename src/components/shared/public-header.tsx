@@ -108,7 +108,7 @@ export function PublicHeader() {
             ))}
           </ul>
           <div className="flex flex-col gap-3">
-            <Button variant="outline" asChild className="w-full justify-center h-12 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground rounded-xl">
+            <Button variant="outline" asChild className="w-full justify-center h-12 border-primary-foreground/20 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground rounded-xl">
               <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>Ingresar</Link>
             </Button>
             <Button asChild className="w-full justify-center rounded-xl h-12 bg-secondary text-secondary-foreground hover:bg-secondary/90">
