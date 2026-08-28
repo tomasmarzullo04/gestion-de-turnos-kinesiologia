@@ -138,9 +138,9 @@ export const bookingService = {
     }
 
     let isPrimerizo = esPrimeraVez ?? false;
-    const rule = getFirstTimeRule(slot.service_slug);
-    if (rule && !isPrimerizo) {
-       isPrimerizo = !(await this.hasClearedFirstTime(userId, rule.slug));
+    const firstTimeRuleForBlock = getFirstTimeRule(slot.service_slug);
+    if (firstTimeRuleForBlock && !isPrimerizo) {
+       isPrimerizo = !(await this.hasClearedFirstTime(userId, firstTimeRuleForBlock.slug));
     }
 
     if (blockCheck.firstTimeBlocked && isPrimerizo) {
