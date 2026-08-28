@@ -156,7 +156,6 @@ model Slot {
   isBlocked      Boolean       @default(false) @map("is_blocked")
   isFirstTime    Boolean       @default(false) @map("is_first_time")
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  is_first_time  Boolean       @default(false)
   professional   Professional? @relation(fields: [professionalId], references: [id], onUpdate: NoAction)
   service        Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   bookings       Booking[]
@@ -262,14 +261,3 @@ model Block {
   @@map("blocks")
 }
 
-model password_reset_tokens {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String
-  token_hash String
-  expires_at DateTime  @db.Timestamptz(6)
-  used_at    DateTime? @db.Timestamptz(6)
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-
-  @@index([token_hash], map: "idx_prt_token_hash")
-  @@index([user_id], map: "idx_prt_user")
-}
