@@ -4,31 +4,34 @@
 
 @layer base {
   :root {
-    /* Neutros CÁLIDOS (no grises fríos) + acento teal — paleta para salud */
-    --background: 40 33% 98%;
-    --foreground: 30 14% 11%;
+    /* Fondos cálidos y limpios */
+    --background: 210 20% 98%;
+    --foreground: 220 39% 11%;
 
-    --card: 40 40% 99%;
-    --card-foreground: 30 14% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 39% 11%;
 
-    --popover: 40 40% 99%;
-    --popover-foreground: 30 14% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 39% 11%;
 
-    /* Acento marino profundo (brand) y celeste (secondary) */
-    --primary: 215 60% 20%;
-    --primary-foreground: 0 0% 100%;
+    /* Azul marino profundo (Brand) */
+    --primary: 222 47% 11%;
+    --primary-foreground: 210 40% 98%;
 
+    /* Celeste / Cian (Acento vibrante) */
     --secondary: 199 89% 48%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 40 20% 95%;
-    --muted-foreground: 35 9% 42%;
+    /* Grises cálidos para fondos inactivos/bordes */
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 199 89% 90%;
-    --accent-foreground: 215 60% 20%;
+    /* Verde sutil inspirado en césped para detalles secundarios */
+    --accent: 142 60% 92%;
+    --accent-foreground: 142 72% 29%;
 
-    --destructive: 6 60% 49%;
-    --destructive-foreground: 40 40% 99%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
 
     --success: 162 78% 31%;
     --success-foreground: 40 40% 99%;
@@ -36,37 +39,39 @@
     --warning: 36 92% 44%;
     --warning-foreground: 30 50% 12%;
 
-    --border: 38 24% 88%;
-    --input: 38 24% 86%;
-    --ring: 215 60% 20%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 222 47% 11%;
 
-    --radius: 0.75rem;
+    /* Bordes más redondeados */
+    --radius: 1rem;
   }
 
   .dark {
-    --background: 36 9% 7%;
-    --foreground: 40 22% 95%;
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
 
-    --card: 36 9% 10%;
-    --card-foreground: 40 22% 95%;
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 36 9% 10%;
-    --popover-foreground: 40 22% 95%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 215 60% 45%;
-    --primary-foreground: 0 0% 100%;
+    /* Azul marino iluminado para contraste */
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11%;
 
     --secondary: 199 89% 48%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 36 8% 16%;
-    --muted-foreground: 38 10% 63%;
+    --muted: 217 32% 17%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 215 60% 20%;
-    --accent-foreground: 199 89% 90%;
+    --accent: 142 40% 16%;
+    --accent-foreground: 142 60% 80%;
 
-    --destructive: 6 58% 53%;
-    --destructive-foreground: 40 40% 98%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
 
     --success: 162 52% 46%;
     --success-foreground: 36 10% 7%;
@@ -74,9 +79,9 @@
     --warning: 38 88% 56%;
     --warning-foreground: 36 50% 10%;
 
-    --border: 36 8% 20%;
-    --input: 36 8% 22%;
-    --ring: 215 60% 45%;
+    --border: 217 32% 17%;
+    --input: 217 32% 17%;
+    --ring: 212 26% 80%;
   }
 }
 
@@ -192,6 +197,42 @@
       rgba(255, 255, 255, 0.05) 50%,
       transparent 100%
     );
+  }
+
+  @keyframes marquee {
+    0% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-marquee {
+    animation: marquee 30s linear infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 rgba(var(--secondary), 0.7);
+    }
+    50% {
+      opacity: 0.7;
+      box-shadow: 0 0 0 6px rgba(var(--secondary), 0);
+    }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Textura sutil para fondos oscuros */
+  .bg-texture-grid {
+    background-image: 
+      linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
   }
 }
 

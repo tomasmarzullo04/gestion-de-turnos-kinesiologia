@@ -70,9 +70,15 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
   return (
     <div className="flex min-h-dvh">
       {/* Sidebar (desktop) */}
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card/50 bg-gradient-to-b from-muted/20 to-transparent lg:flex">
-        <div className="flex h-32 items-center justify-center border-b px-6 bg-card/80 backdrop-blur-sm">
-          <BrandMark className="h-24 w-24" />
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card/40 lg:flex">
+        <div className="flex h-16 items-center border-b px-6 bg-card/60 backdrop-blur-md gap-3">
+          <BrandMark className="h-8 w-8 shrink-0" />
+          <div className="flex flex-col overflow-hidden">
+            <span className="font-display font-bold text-base leading-tight tracking-tight text-foreground truncate">APEX</span>
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest leading-none truncate">
+              {role === ROLES.ADMIN ? "Panel del profesional" : "Portal del socio"}
+            </span>
+          </div>
         </div>
         <nav className="flex-1 space-y-4 p-4 pt-10">
           {nav.map((item) => {
@@ -89,10 +95,10 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground hover:shadow-sm",
                 )}
               >
-                {/* Indicador activo: barra de acento que crece (CSS, sin dep). */}
+                {/* Indicador activo: fondo sutil y barra lateral */}
                 <span
                   className={cn(
-                    "absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-transform duration-300 ease-out-soft",
+                    "absolute left-0 top-1/2 h-full w-1 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-300 ease-out-soft",
                     active ? "scale-y-100 opacity-100" : "scale-y-0 opacity-0",
                   )}
                 />
@@ -107,9 +113,9 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col bg-muted/20">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-32 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur lg:px-6">
+        <header className="sticky top-0 z-30 flex h-20 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur-md lg:px-6 shadow-sm">
           <div className="flex items-center gap-2">
             {/* Mobile nav (drawer azul marino) */}
             <MobileNav
@@ -119,9 +125,10 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
             />
             <Link
               href={homeHref}
-              className="flex items-center font-display font-semibold tracking-tight lg:hidden"
+              className="flex items-center gap-2 font-display font-semibold tracking-tight lg:hidden"
             >
-              <BrandMark className="h-20 w-20" animate={false} />
+              <BrandMark className="h-8 w-8" animate={false} />
+              <span className="font-display font-bold text-lg text-foreground">APEX</span>
             </Link>
           </div>
 
@@ -135,7 +142,7 @@ export function DashboardShell({ role, user, children }: DashboardShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-8 bg-muted/10">
+        <main className="flex-1 p-4 lg:p-8">
           <div className="mx-auto w-full max-w-6xl animate-fade-in">
             {children}
           </div>

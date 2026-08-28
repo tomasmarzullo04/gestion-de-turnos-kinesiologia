@@ -11,10 +11,10 @@ interface StatCardProps {
 
 export function StatCard({ label, value, icon: Icon, hint }: StatCardProps) {
   return (
-    <Card className="transition-all duration-200 ease-out-soft hover:-translate-y-0.5 hover:shadow-e2">
-      <CardContent className="flex items-center gap-4 p-5">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 text-primary shadow-sm border border-primary/10">
-          <Icon className="h-5 w-5" />
+    <Card className="rounded-2xl transition-all duration-300 ease-out-soft hover:-translate-y-1 hover:shadow-md border border-border/50 bg-card">
+      <CardContent className="flex items-center gap-5 p-6">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+          <Icon className="h-6 w-6" />
         </span>
         <div className="min-w-0">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
