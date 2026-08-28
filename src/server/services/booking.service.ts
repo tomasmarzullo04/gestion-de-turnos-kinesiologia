@@ -136,7 +136,14 @@ export const bookingService = {
     if (blockCheck.totalBlocked) {
       throw new BusinessError("Esa franja está bloqueada y no admite reservas.");
     }
-    if (blockCheck.firstTimeBlocked && esPrimeraVez) {
+
+    let isPrimerizo = esPrimeraVez ?? false;
+    const rule = getFirstTimeRule(slot.service_slug);
+    if (rule && !isPrimerizo) {
+       isPrimerizo = !(await this.hasClearedFirstTime(userId, rule.slug));
+    }
+
+    if (blockCheck.firstTimeBlocked && isPrimerizo) {
       throw new BusinessError(
         "Esa franja no está disponible para tu primer turno. Probá con otro horario.",
       );

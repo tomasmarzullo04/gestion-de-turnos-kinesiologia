@@ -170,7 +170,8 @@ export function BookingFlow({
       }
     }
     
-    if (esPrimeraVez) {
+    const isPrimerizo = esPrimeraVez || (selectedService && restrictedSlugs.includes(selectedService.slug));
+    if (isPrimerizo) {
       _slots = _slots.map((slot) => {
         if (slot.firstTimeBlocked) {
           return { ...slot, available: false, isBlocked: true };
