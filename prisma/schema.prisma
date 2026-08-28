@@ -86,6 +86,20 @@ model User {
   @@index([apellido])
 }
 
+/// Token de restablecimiento de contraseña (un solo uso, hasheado, con expiración).
+model PasswordResetToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tokenHash])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
 /// Profesional del estudio.
 model Professional {
   id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -140,6 +154,7 @@ model Slot {
   capacity       Int
   bookedCount    Int           @default(0) @map("booked_count")
   isBlocked      Boolean       @default(false) @map("is_blocked")
+  isFirstTime    Boolean       @default(false) @map("is_first_time")
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   is_first_time  Boolean       @default(false)
   professional   Professional? @relation(fields: [professionalId], references: [id], onUpdate: NoAction)
@@ -163,8 +178,8 @@ model Booking {
   recurrenceId String? @map("recurrence_id") @db.Uuid
   isOverride Boolean  @default(false) @map("is_override")
   overrideBy String?  @map("override_by")
-  cancelled_by String?
-  cancelled_at DateTime? @db.Timestamptz(6)
+  cancelledBy String? @map("cancelled_by")
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   slot      Slot        @relation(fields: [slotId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   service   Service?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)

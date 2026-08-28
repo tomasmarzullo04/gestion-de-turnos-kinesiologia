@@ -52,18 +52,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatARS, monthName, shiftMonth } from "@/lib/money";
-import { type MonthlySummary, type PaymentMovement, type ServiceRevenue } from "@/server/services/payment.service";
+import { shiftCycle } from "@/lib/financial-cycle";
+import { formatARS } from "@/lib/money";
+import { type PeriodSummary, type PaymentMovement, type ServiceRevenue } from "@/server/services/payment.service";
 
 interface ServiceOption {
   id: string;
   name: string;
 }
 
+/** "YYYY-MM-DD" → "DD/MM/YYYY" (reordena el string; sin Date, sin zona horaria). */
+function toDMY(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
+
 interface Props {
   month: number;
   year: number;
-  summary: MonthlySummary;
+  periodLabel: string;
+  summary: PeriodSummary;
   copagoAmount: number;
   patients: { id: string; name: string }[];
   todayKey: string;
@@ -74,6 +82,7 @@ interface Props {
 export function FinanzasView({
   month,
   year,
+  periodLabel,
   summary,
   copagoAmount,
   patients,
@@ -87,8 +96,8 @@ export function FinanzasView({
   const [voiding, setVoiding] = React.useState<PaymentMovement | null>(null);
   const [isPending, startTransition] = React.useTransition();
 
-  const prev = shiftMonth(month, year, -1);
-  const next = shiftMonth(month, year, 1);
+  const prev = shiftCycle(month, year, -1);
+  const next = shiftCycle(month, year, 1);
   const diff = summary.total - summary.prevTotal;
 
   function handleVoid() {
@@ -103,26 +112,27 @@ export function FinanzasView({
 
   return (
     <div className="space-y-6">
-      {/* Navegación de mes + acciones */}
+      {/* Navegación de período (ciclo 15 a 15) + acciones */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" asChild>
-            <Link href={`/admin/finanzas?m=${prev.month}&y=${prev.year}`} aria-label="Mes anterior">
+            <Link href={`/admin/finanzas?m=${prev.month}&y=${prev.year}`} aria-label="Período anterior">
               <ChevronLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <span className="min-w-[10rem] text-center font-display text-lg font-semibold tracking-tight">
-            {monthName(month)} {year}
+          <span className="min-w-[12rem] text-center font-display text-lg font-semibold tracking-tight">
+            {periodLabel}
           </span>
           <Button variant="outline" size="icon" asChild>
-            <Link href={`/admin/finanzas?m=${next.month}&y=${next.year}`} aria-label="Mes siguiente">
+            <Link href={`/admin/finanzas?m=${next.month}&y=${next.year}`} aria-label="Período siguiente">
               <ChevronRight className="h-4 w-4" />
             </Link>
           </Button>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <Select 
-            value={selectedServiceId || "all"} 
+          <Select
+            value={selectedServiceId || "all"}
+            disabled={isPending}
             onValueChange={(val) => {
               const url = new URL(window.location.href);
               if (val === "all") {
@@ -130,10 +140,14 @@ export function FinanzasView({
               } else {
                 url.searchParams.set("service", val);
               }
-              router.push(url.pathname + url.search);
+              // startTransition: navegación concurrente → mantiene la UI visible
+              // y da estado de carga en vez de congelarse.
+              startTransition(() => {
+                router.push(url.pathname + url.search);
+              });
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px]" aria-busy={isPending}>
               <SelectValue placeholder="Todos los servicios" />
             </SelectTrigger>
             <SelectContent>
@@ -165,8 +179,8 @@ export function FinanzasView({
           icon={Wallet}
           hint={
             diff === 0
-              ? "igual que el mes anterior"
-              : `${diff > 0 ? "+" : "−"}${formatARS(Math.abs(diff))} vs mes anterior`
+              ? "igual que el período anterior"
+              : `${diff > 0 ? "+" : "−"}${formatARS(Math.abs(diff))} vs período anterior`
           }
         />
         <StatCard label="Copagos" value={formatARS(summary.totalCopagos)} icon={Receipt} />
@@ -185,14 +199,14 @@ export function FinanzasView({
       {/* Movimientos del mes */}
       <div className="rounded-xl border">
         <div className="border-b px-4 py-3 text-sm font-medium">
-          Movimientos de {monthName(month)}
+          Movimientos del período ({periodLabel})
         </div>
         {summary.movements.length === 0 ? (
           <div className="p-6">
             <EmptyState
               icon={Receipt}
               title="Sin movimientos"
-              description="Todavía no se registraron cobros en este mes."
+              description="Todavía no se registraron cobros en este período."
             />
           </div>
         ) : (
@@ -233,7 +247,7 @@ export function FinanzasView({
                       )}
                     </TableCell>
                     <TableCell className="tabular-nums text-sm text-muted-foreground">
-                      {m.paidAt}
+                      {toDMY(m.paidAt)}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatARS(m.amount)}
@@ -383,7 +397,7 @@ function ExtraDialog({
         concept,
         amount,
         paidAt,
-        serviceId: serviceId || undefined,
+        serviceId,
       });
       if (result.success) {
         toast.success("Cobro extra registrado");
@@ -400,7 +414,7 @@ function ExtraDialog({
         <DialogHeader>
           <DialogTitle>Registrar cobro extra</DialogTitle>
           <DialogDescription>
-            Se imputa al mes de la fecha de pago.
+            Se imputa al período (ciclo 15 a 15) de la fecha de pago.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -423,7 +437,7 @@ function ExtraDialog({
             <Label>Servicio</Label>
             <Select value={serviceId} onValueChange={setServiceId}>
               <SelectTrigger>
-                <SelectValue placeholder="Seleccioná un servicio (opcional)" />
+                <SelectValue placeholder="Seleccioná un servicio" />
               </SelectTrigger>
               <SelectContent>
                 {services.map((s) => (
@@ -471,7 +485,7 @@ function ExtraDialog({
             <SubmitButton
               loading={isPending}
               loadingText="Registrando…"
-              disabled={!userId || !concept.trim() || !(amount >= 1)}
+              disabled={!userId || !serviceId || !concept.trim() || !(amount >= 1)}
             >
               Registrar
             </SubmitButton>

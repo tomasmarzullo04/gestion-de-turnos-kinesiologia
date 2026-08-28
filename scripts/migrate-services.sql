@@ -171,7 +171,7 @@ INSERT INTO services (name, slug, color, capacity, schedule) VALUES
     '[{"days":[1,3,5],"start":"08:00","end":"12:00"},{"days":[1,3,5],"start":"16:00","end":"20:00"}]'::jsonb
   ),
   (
-    'REHAB',
+    'Kinesiología',
     'rehab',
     '#ef4444',
     5,

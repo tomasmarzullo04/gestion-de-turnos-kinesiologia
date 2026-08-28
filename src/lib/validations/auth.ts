@@ -88,6 +88,30 @@ export const profileSchema = z.object({
     .or(z.literal("")),
 });
 
+/** Solicitud de restablecimiento: solo el email. */
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .min(1, "El email es obligatorio")
+    .email("Email inválido")
+    .toLowerCase()
+    .trim(),
+});
+
+/** Definir la nueva contraseña con el token del enlace. */
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(10, "Token inválido"),
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, "Confirmá la contraseña"),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirmPassword"],
+  });
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ProfileInput = z.infer<typeof profileSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

@@ -14,6 +14,7 @@ export interface AttendanceAttendee {
   notes: string | null;
   serviceName: string | null;
   serviceColor: string | null;
+  recurrenceId: string | null;
   coverageString: string | null;
   coverageName: string | null;
   requiresCopay: boolean;
@@ -65,12 +66,14 @@ export const attendanceService = {
         status: string;
         service_name: string | null;
         service_color: string | null;
+        recurrence_id: string | null;
       }[]
     >`
       SELECT b.id AS booking_id, b.slot_id, b.user_id, b.notes,
              COALESCE(a.status, 'PENDING') AS status,
              srv.name AS service_name,
-             srv.color AS service_color
+             srv.color AS service_color,
+             b.recurrence_id::text AS recurrence_id
       FROM bookings b
       JOIN slots s ON s.id = b.slot_id
       LEFT JOIN attendances a ON a.booking_id = b.id
@@ -114,6 +117,7 @@ export const attendanceService = {
             status: (r.status as AttendanceStatus) ?? ATTENDANCE_STATUS.PENDING,
             serviceName: r.service_name,
             serviceColor: r.service_color,
+            recurrenceId: r.recurrence_id,
             coverageString: uAny?.tipo_cobertura ?? null,
             coverageName: uAny?.obra_social_nombre ?? null,
             requiresCopay: uAny?.requiere_copago ?? false,

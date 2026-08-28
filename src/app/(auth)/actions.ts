@@ -2,13 +2,16 @@
 
 import { AuthError } from "next-auth";
 import { headers } from "next/headers";
+import { after } from "next/server";
 
 import { signIn, signOut } from "@/lib/auth/auth";
 import { logger } from "@/lib/logger";
 import { rateLimit } from "@/lib/rate-limit";
 import {
+  forgotPasswordSchema,
   loginSchema,
   registerSchema,
+  resetPasswordSchema,
   type LoginInput,
   type RegisterInput,
 } from "@/lib/validations/auth";
@@ -16,6 +19,8 @@ import {
   authService,
   EmailAlreadyInUseError,
 } from "@/server/services/auth.service";
+import { passwordResetService } from "@/server/services/password-reset.service";
+import { sendResetEmail } from "@/server/email/send-reset-email";
 import { type ActionResult } from "@/types";
 
 /**
@@ -145,4 +150,108 @@ export async function registerAction(
 
 export async function logoutAction(): Promise<void> {
   await signOut({ redirectTo: "/login" });
+}
+
+/** Base URL absoluta para armar el enlace del email (env o host del request). */
+async function getBaseUrl(): Promise<string> {
+  const env = process.env.NEXT_PUBLIC_APP_URL;
+  if (env) return env.replace(/\/+$/, "");
+  const headerList = await headers();
+  const host =
+    headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
+  const proto = headerList.get("x-forwarded-proto") ?? "https";
+  return `${proto}://${host}`;
+}
+
+/**
+ * Solicitud de restablecimiento. SIEMPRE responde igual (no revela si el email
+ * existe). Rate-limited por IP+email. El envío del correo lo hace la Edge
+ * Function de Supabase; nunca se loguea el token ni la URL.
+ */
+export async function forgotPasswordAction(input: unknown): Promise<ActionResult> {
+  const parsed = forgotPasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Email inválido",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const ip = await getClientIp();
+  // Máximo 3 solicitudes cada 15 minutos por IP+email → frena spam de correos.
+  const limit = rateLimit(`reset-req:${ip}:${parsed.data.email}`, 3, 15 * 60 * 1000);
+  if (!limit.success) {
+    return {
+      success: false,
+      error: `Demasiadas solicitudes. Probá de nuevo en ${limit.retryAfter}s.`,
+    };
+  }
+
+  try {
+    const token = await passwordResetService.createTokenForEmail(parsed.data.email);
+    if (token) {
+      const base = await getBaseUrl();
+      const resetUrl = `${base}/reset-password?token=${token.rawToken}`;
+      const email = parsed.data.email;
+      const name = token.name;
+      // Envío en segundo plano (after): no bloquea la respuesta ni la altera.
+      after(async () => {
+        try {
+          await sendResetEmail({ email, name, resetUrl, expiresInMinutes: 60 });
+        } catch (error) {
+          logger.warn("Fallo al enviar el email de restablecimiento", {
+            error: String(error),
+          });
+        }
+      });
+    }
+  } catch (error) {
+    logger.error("Error en forgotPassword", { error: String(error) });
+    // Igual respondemos genérico.
+  }
+
+  // Respuesta genérica siempre (exista o no la cuenta).
+  return { success: true, data: undefined };
+}
+
+/**
+ * Define la nueva contraseña con el token del enlace. Valida token (existe, no
+ * usado, no vencido), hashea con bcrypt y marca el token como usado.
+ */
+export async function resetPasswordAction(input: unknown): Promise<ActionResult> {
+  const parsed = resetPasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Datos inválidos",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const ip = await getClientIp();
+  const limit = rateLimit(`reset-confirm:${ip}`, 10, 60 * 1000);
+  if (!limit.success) {
+    return {
+      success: false,
+      error: `Demasiados intentos. Probá de nuevo en ${limit.retryAfter}s.`,
+    };
+  }
+
+  try {
+    const ok = await passwordResetService.resetPassword(
+      parsed.data.token,
+      parsed.data.password,
+    );
+    if (!ok) {
+      return {
+        success: false,
+        error: "El enlace es inválido o venció. Pedí uno nuevo.",
+      };
+    }
+    return { success: true, data: undefined };
+  } catch (error) {
+    logger.error("Error en resetPassword", { error: String(error) });
+    return { success: false, error: "No se pudo restablecer. Intentá nuevamente." };
+  }
 }

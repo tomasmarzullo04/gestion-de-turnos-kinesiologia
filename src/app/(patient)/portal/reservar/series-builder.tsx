@@ -36,7 +36,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DAYS_OF_WEEK } from "@/lib/constants";
-import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey } from "@/lib/datetime";
+import { getFirstTimeRule } from "@/lib/first-time-rule";
 import { cn } from "@/lib/utils";
 import {
   type SeriesItemStatus,
@@ -51,18 +52,18 @@ const STATUS_META: Record<
   full: { label: "Sin cupo", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
   no_slot: { label: "Sin franja ese día", className: "bg-muted text-muted-foreground" },
   already: { label: "Ya tenías turno", className: "bg-muted text-muted-foreground" },
-  rehab_window: { label: "Fuera de la ventana de tu 1er REHAB", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
+  rehab_window: { label: "Fuera de la ventana de tu 1er turno", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
   error: { label: "No se pudo", className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
 };
 
 interface Props {
   services: ServiceOption[];
-  esPrimerRehab: boolean;
+  restrictedSlugs: string[];
   todayKey: string;
   defaultToDate: string;
 }
 
-export function SeriesBuilder({ services, esPrimerRehab, todayKey, defaultToDate }: Props) {
+export function SeriesBuilder({ services, restrictedSlugs, todayKey, defaultToDate }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
@@ -75,7 +76,10 @@ export function SeriesBuilder({ services, esPrimerRehab, todayKey, defaultToDate
   const [notes, setNotes] = React.useState("");
   const [result, setResult] = React.useState<SeriesResult | null>(null);
 
-  const restrictRehab = esPrimerRehab && service?.slug === "rehab";
+  const firstTimeRule =
+    service && restrictedSlugs.includes(service.slug)
+      ? getFirstTimeRule(service.slug)
+      : null;
 
   function handleService(s: ServiceOption) {
     setService(s);
@@ -126,12 +130,12 @@ export function SeriesBuilder({ services, esPrimerRehab, todayKey, defaultToDate
 
   return (
     <div className="space-y-4">
-      {restrictRehab && (
+      {firstTimeRule && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-950/30">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <p className="text-xs text-amber-800 dark:text-amber-300">
-            Como es tu primer turno de rehabilitación, solo se reservarán las fechas dentro de la
-            ventana permitida (lunes tarde, miércoles, o viernes mañana). El resto se omite.
+            Como es tu primer turno, solo se reservarán las fechas dentro de la ventana permitida.
+            {" "}{firstTimeRule.message} El resto se omite.
           </p>
         </div>
       )}
@@ -259,7 +263,7 @@ export function SeriesBuilder({ services, esPrimerRehab, todayKey, defaultToDate
                     ) : (
                       <X className="h-4 w-4 text-muted-foreground" />
                     )}
-                    {formatDate(parseLocalDateKey(r.date))}
+                    {formatDateKey(r.date)}
                     <span className="tabular-nums text-muted-foreground">· {r.startTime}{r.endTime ? `–${r.endTime}` : ""} h</span>
                   </span>
                   <Badge variant="secondary" className={meta.className}>

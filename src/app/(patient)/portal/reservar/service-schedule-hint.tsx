@@ -15,13 +15,14 @@ export interface ScheduleEntry {
 interface Props {
   serviceName: string;
   entries: ScheduleEntry[];
-  restrictRehab?: boolean;
+  /** Nota de primer turno (mensaje de la regla) si aplica; si no, null. */
+  firstTimeNote?: string | null;
 }
 
 // Lunes primero (0 = domingo).
 const order = (d: number) => (d === 0 ? 7 : d);
 
-export function ServiceScheduleHint({ serviceName, entries, restrictRehab }: Props) {
+export function ServiceScheduleHint({ serviceName, entries, firstTimeNote }: Props) {
   const byDay = React.useMemo(() => {
     const map = new Map<number, ScheduleEntry[]>();
     for (const e of entries) {
@@ -63,10 +64,9 @@ export function ServiceScheduleHint({ serviceName, entries, restrictRehab }: Pro
           </li>
         ))}
       </ul>
-      {restrictRehab && (
+      {firstTimeNote && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-          Para tu primer turno de rehabilitación solo podés reservar lunes a la tarde, miércoles, o
-          viernes a la mañana.
+          {firstTimeNote}
         </p>
       )}
     </div>

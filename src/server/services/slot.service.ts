@@ -37,6 +37,7 @@ export interface SlotAttendee {
   name: string;
   email: string;
   notes: string | null;
+  recurrenceId: string | null;
 }
 
 export interface AdminSlotView extends SlotView {
@@ -137,6 +138,7 @@ export const slotService = {
                count(*) AS total_slots
         FROM slots s
         WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
+          AND NOT s.is_first_time
           AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
           AND s.service_id = ${serviceId}::uuid
         GROUP BY s.date
@@ -163,6 +165,7 @@ export const slotService = {
                count(*) AS total_slots
         FROM slots s
         WHERE s.date >= (now() AT TIME ZONE ${TIMEZONE})::date
+          AND NOT s.is_first_time
           AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
         GROUP BY s.date
         ORDER BY s.date
@@ -216,6 +219,7 @@ export const slotService = {
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date
+            AND NOT s.is_first_time
             AND s.service_id = ${serviceId}::uuid
           ORDER BY s.start_time
         `
@@ -249,6 +253,7 @@ export const slotService = {
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date
+            AND NOT s.is_first_time
           ORDER BY s.start_time
         `;
     return rows.map(toSlotView);
@@ -302,7 +307,7 @@ export const slotService = {
         status: "CONFIRMED",
         slot: { date: new Date(`${dateKey}T00:00:00.000Z`) },
       },
-      select: { id: true, slotId: true, userId: true, notes: true },
+      select: { id: true, slotId: true, userId: true, notes: true, recurrenceId: true },
     });
 
     // Resolver nombres de pacientes (bookings.user_id = User.id, sin FK).
@@ -324,6 +329,7 @@ export const slotService = {
             name: u?.name ?? "Paciente",
             email: u?.email ?? "—",
             notes: b.notes,
+            recurrenceId: b.recurrenceId,
           };
         });
       return { ...view, attendees };

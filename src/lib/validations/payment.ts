@@ -20,7 +20,7 @@ export const registerCopagoSchema = z.object({
     .max(200, "Cantidad demasiado alta"),
   unitAmount: amount,
   paidAt: dateField,
-  serviceId: z.string().uuid("Servicio inválido").optional(),
+  serviceId: z.string().uuid("Seleccioná un servicio"),
 });
 
 /** Registrar un cobro extra puntual. */
@@ -33,7 +33,7 @@ export const registerExtraSchema = z.object({
     .min(1, "Ingresá un concepto")
     .max(200, "Concepto demasiado largo"),
   paidAt: dateField,
-  serviceId: z.string().uuid("Servicio inválido").optional(),
+  serviceId: z.string().uuid("Seleccioná un servicio"),
 });
 
 /** Anular un pago (queda registro, no se borra). */

@@ -48,6 +48,7 @@ export const generationService = {
           SELECT 1 FROM slots s
           WHERE s.date = d::date
             AND s.start_time = gs::time
+            AND NOT s.is_first_time
             AND s.professional_id IS NOT DISTINCT FROM t.professional_id
             AND s.service_id IS NOT DISTINCT FROM t.service_id
         )
@@ -85,6 +86,7 @@ export const generationService = {
       FROM slot_templates t
       WHERE s.date >= current_date
         AND s.booked_count = 0
+        AND NOT s.is_first_time
         AND t.active
         AND extract(dow FROM s.date) = t.day_of_week
         AND s.start_time >= t.start_time
@@ -98,6 +100,7 @@ export const generationService = {
       DELETE FROM slots s
       WHERE s.date >= current_date
         AND s.booked_count = 0
+        AND NOT s.is_first_time
         AND NOT EXISTS (
           SELECT 1 FROM slot_templates t
           WHERE t.active
@@ -129,6 +132,7 @@ export const generationService = {
                   AND s.service_id IS NOT DISTINCT FROM t.service_id) AS tpl_capacity
         FROM slots s
         WHERE s.date >= current_date AND s.booked_count > 0
+          AND NOT s.is_first_time
       )
       SELECT m.date::text AS date,
              to_char(m.start_time, 'HH24:MI') AS start_time,

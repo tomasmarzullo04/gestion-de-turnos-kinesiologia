@@ -81,7 +81,7 @@ async function main() {
     { name: "Recovery", slug: "recovery", color: "#0284c7", capacity: 2 },
     { name: "Respi", slug: "respi", color: "#7c3aed", capacity: 4 },
     { name: "Gym", slug: "gym", color: "#d97706", capacity: 6 },
-    { name: "Rehab", slug: "rehab", color: "#dc2626", capacity: 5 },
+    { name: "Kinesiología", slug: "rehab", color: "#dc2626", capacity: 5 },
   ];
   const serviceId: Record<string, string> = {};
   for (const s of serviceDefs) {

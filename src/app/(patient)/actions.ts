@@ -12,6 +12,7 @@ import { DAYS_OF_WEEK, ROLES } from "@/lib/constants";
 import { parseLocalDateKey } from "@/lib/datetime";
 import { rateLimit } from "@/lib/rate-limit";
 import {
+  bookFirstTimeKinesioSchema,
   bookSeriesSchema,
   bookSlotSchema,
   cancelBookingSchema,
@@ -119,6 +120,79 @@ export async function getMySameDayBookingsAction(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Fecha inválida");
     const list = await bookingService.getSameDayBookings(user.id, date);
     return ok(list);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+// ── Caso especial: primer turno de Kinesiología en turnos de 40 min ──────────
+
+/** Disponibilidad de turnos de 40 min para el primer turno de kinesio. */
+export async function getFirstTimeKinesioAvailabilityAction(): Promise<
+  ActionResult<{
+    alreadyBooked: boolean;
+    days: { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[];
+  }>
+> {
+  try {
+    const user = await assertRole(ROLES.PATIENT);
+    const result = await bookingService.getFirstTimeKinesioAvailability(user.id);
+    return ok(result);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Reserva un turno individual de 40 min (primer turno de kinesio). */
+export async function bookFirstTimeKinesioAction(
+  input: unknown,
+): Promise<ActionResult<{ date: string; startTime: string; endTime: string }>> {
+  try {
+    const user = await assertRole(ROLES.PATIENT);
+
+    if (await patientService.isArchived(user.id)) {
+      return fail("Tu cuenta está inactiva. Contactá a recepción.");
+    }
+    const limit = rateLimit(`book:${user.id}`, 10, 60 * 60 * 1000);
+    if (!limit.success) {
+      return fail(`Demasiadas reservas seguidas. Reintentá en ${limit.retryAfter}s.`);
+    }
+
+    const data = bookFirstTimeKinesioSchema.parse(input);
+    const result = await bookingService.bookFirstTimeKinesio({
+      userId: user.id,
+      date: data.date,
+      startTime: data.startTime,
+      notes: data.notes || null,
+    });
+
+    // Confirmación por mail (mismo evento y patrón after() que la reserva normal).
+    if (result.bookingId) {
+      const bookingId = result.bookingId;
+      after(async () => {
+        const service = await serviceService.findById(result.serviceId);
+        await emitEvent(
+          "appointment.confirmed",
+          {
+            booking: {
+              id: bookingId,
+              date: result.date,
+              startTime: result.startTime,
+              endTime: result.endTime,
+            },
+            service: { id: result.serviceId, name: service?.name ?? null },
+            patient: { name: user.name, email: user.email },
+            isFirstTime: true,
+          },
+          `${bookingId}:appointment.confirmed`,
+        );
+      });
+    }
+
+    revalidatePath("/portal");
+    revalidatePath("/portal/reservar");
+    revalidatePath("/portal/turnos");
+    return ok({ date: result.date, startTime: result.startTime, endTime: result.endTime });
   } catch (error) {
     return fromError(error);
   }

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { format, subDays } from "date-fns";
-import { toLocalDateKey } from "@/lib/datetime";
+import { parseLocalDateKey, toLocalDateKey } from "@/lib/datetime";
 
 export interface DailyKPIs {
   totalCapacity: number;
@@ -96,25 +96,33 @@ export const analyticsService = {
    * Ocupación por franja horaria para el gráfico de barras.
    */
   async getOccupancyBySlot(dateKey: string): Promise<SlotOccupancy[]> {
+    // Reservas REALES por franja horaria del día, agregadas en la base. Se suma
+    // por horario (varios servicios comparten una franja) → una barra por hora.
+    // La suma de `booked` = SUM(booked_count) del día = KPI "Turnos Reservados".
     const res = await prisma.$queryRaw<
-      { time: string; capacity: number; booked: number }[]
+      { time: string; capacity: bigint; booked: bigint }[]
     >`
-      SELECT 
+      SELECT
         to_char(start_time, 'HH24:MI') as time,
-        capacity,
-        booked_count as booked
+        COALESCE(SUM(capacity), 0)     as capacity,
+        COALESCE(SUM(booked_count), 0) as booked
       FROM slots
       WHERE date = ${dateKey}::date
+      GROUP BY start_time
       ORDER BY start_time
     `;
 
-    return res.map((r) => ({
-      time: r.time,
-      capacity: r.capacity,
-      booked: r.booked,
-      free: r.capacity - r.booked,
-      occupancyRate: r.capacity > 0 ? (r.booked / r.capacity) * 100 : 0,
-    }));
+    return res.map((r) => {
+      const capacity = Number(r.capacity);
+      const booked = Number(r.booked);
+      return {
+        time: r.time,
+        capacity,
+        booked,
+        free: capacity - booked,
+        occupancyRate: capacity > 0 ? (booked / capacity) * 100 : 0,
+      };
+    });
   },
 
   /**
@@ -189,23 +197,26 @@ export const analyticsService = {
    * "Semana actual" = últimos 7 días terminando en `endDateKey`.
    * "Semana anterior" = 7 días previos a "Semana actual".
    */
-  async getWeeklyComparison(endDateKey: string) {
-    const currentEnd = new Date(endDateKey);
-    const currentStart = subDays(currentEnd, 6); // 7 days total inclusive
-    const prevEnd = subDays(currentStart, 1);
-    const prevStart = subDays(prevEnd, 6);
+  /**
+   * Comparación coherente con el KPI diario "Turnos Reservados (Hoy)": HOY vs el
+   * MISMO día de la semana pasada (ambos = SUM(booked_count) de ESE único día).
+   * `bookedDiff` puede ser 0 o negativo: refleja la realidad, no un total inflado.
+   */
+  async getWeeklyComparison(dateKey: string) {
+    // Sin round-trip por `new Date()` (que corría el día): trabajamos con el
+    // string de fecha calendario y solo restamos 7 días para el día equivalente.
+    const prevDateKey = format(subDays(parseLocalDateKey(dateKey), 7), "yyyy-MM-dd");
 
-    const getStats = async (start: Date, end: Date) => {
+    const getStats = async (day: string) => {
       const res = await prisma.$queryRaw<{ total_booked: bigint; expected: bigint; present: bigint }[]>`
-        SELECT 
+        SELECT
           COALESCE(SUM(s.booked_count), 0) as total_booked,
           COUNT(b.id) as expected,
           SUM(CASE WHEN a.status = 'PRESENT' THEN 1 ELSE 0 END) as present
         FROM slots s
         LEFT JOIN bookings b ON b.slot_id = s.id AND b.status = 'CONFIRMED'
         LEFT JOIN attendances a ON a.booking_id = b.id
-        WHERE s.date >= ${toLocalDateKey(start)}::date
-          AND s.date <= ${toLocalDateKey(end)}::date
+        WHERE s.date = ${day}::date
       `;
       const r = res[0] || { total_booked: 0n, expected: 0n, present: 0n };
       const expected = Number(r.expected);
@@ -216,8 +227,8 @@ export const analyticsService = {
       };
     };
 
-    const current = await getStats(currentStart, currentEnd);
-    const prev = await getStats(prevStart, prevEnd);
+    const current = await getStats(dateKey);
+    const prev = await getStats(prevDateKey);
 
     return {
       current,

@@ -3,7 +3,7 @@ import { CalendarDays, Clock } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { type BookingStatus } from "@/lib/booking-config";
-import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { type MyBooking } from "@/server/services/booking.service";
 
@@ -28,7 +28,7 @@ export function BookingCard({ booking, action, muted = false }: BookingCardProps
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1.5 font-semibold capitalize">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              {formatDate(parseLocalDateKey(booking.date))}
+              {formatDateKey(booking.date)}
             </span>
             <StatusBadge status={booking.status as BookingStatus} />
           </div>

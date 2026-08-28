@@ -2,8 +2,6 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import {
   AlertTriangle,
   CalendarCheck,
@@ -19,6 +17,7 @@ import {
   cancelBookingAction,
   getMySameDayBookingsAction,
 } from "@/app/(patient)/actions";
+import { DayPicker } from "@/components/features/day-picker";
 import { SameDayWarning } from "@/components/features/same-day-warning";
 import { SlotGrid } from "@/components/features/slot-grid";
 import {
@@ -31,14 +30,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, parseLocalDateKey } from "@/lib/datetime";
+import { formatDateKey, parseLocalDateKey } from "@/lib/datetime";
 import {
-  REHAB_FIRST_TIME_EMPTY,
-  REHAB_SLUG,
-  isRehabFirstTimeDayAllowed,
-  isRehabFirstTimeSlotAllowed,
-} from "@/lib/rehab-first-time";
+  getFirstTimeRule,
+  isFirstTimeDateBlocked,
+  isFirstTimeDayAllowed,
+  isFirstTimeSlotAllowed,
+  usesIndividualFirstTime,
+} from "@/lib/first-time-rule";
 import { cn } from "@/lib/utils";
+import { FirstTimeKinesioBooking } from "@/app/(patient)/portal/reservar/first-time-kinesio-booking";
 import {
   ServiceScheduleHint,
   type ScheduleEntry,
@@ -51,9 +52,8 @@ interface Props {
   days: DayAvailability[];
   initialDate: string | null;
   initialSlots: SlotView[];
-  /** El paciente nunca tuvo un turno de REHAB confirmado → aplica la ventana. */
-  esPrimerRehab: boolean;
   esPrimeraVez: boolean;
+  restrictedSlugs: string[];
   /** Patrón semanal por servicio (id → días/horarios/cupos) para el cartel. */
   schedules: Record<string, ScheduleEntry[]>;
 }
@@ -87,8 +87,8 @@ export function BookingFlow({
   days: initialDays, 
   initialDate, 
   initialSlots, 
-  esPrimerRehab, 
   esPrimeraVez,
+  restrictedSlugs, 
   schedules 
 }: Props) {
   const router = useRouter();
@@ -115,48 +115,72 @@ export function BookingFlow({
   // Cupos en vivo (Realtime).
   useRealtimeSlots(selectedDate, setSlots);
 
-  // La restricción de horarios aplica SOLO al primer turno de REHAB: cuando el
-  // servicio elegido es REHAB y el paciente nunca tuvo uno confirmado. Cualquier
-  // otro servicio (o un REHAB que no sea el primero) no tiene restricción.
-  const restrictRehab =
-    Boolean(selectedService) &&
-    selectedService!.slug === REHAB_SLUG &&
-    esPrimerRehab;
+  // Regla de primer turno del servicio elegido, SÓLO si el paciente aún no la
+  // cumplió (su slug está en restrictedSlugs). Cualquier servicio sin regla, o
+  // ya cumplida, no tiene restricción. `getFirstTimeRule` devuelve una
+  // referencia estable, así que sirve como dependencia de los useMemo.
+  const firstTimeRule =
+    selectedService && restrictedSlugs.includes(selectedService.slug)
+      ? getFirstTimeRule(selectedService.slug)
+      : null;
 
-  // ── Filtrado de días por la ventana del primer REHAB ───────────────────
+  // Caso especial (kinesio + primerizo): turnos individuales de 40 min. Único
+  // punto de decisión; si es false, el flujo por hora de siempre queda intacto.
+  const kinesio40 = Boolean(
+    selectedService &&
+      usesIndividualFirstTime(
+        selectedService.slug,
+        restrictedSlugs.includes(selectedService.slug),
+      ),
+  );
+
+  // ── Filtrado de días por la ventana del primer turno ───────────────────
+  // Solo aplica a primerizos (firstTimeRule != null). Además de la ventana,
+  // saca los días con excepción puntual (fecha bloqueada para primer turno):
+  // el primerizo no los ve. Los no-primerizos no pasan por acá.
   const filteredDays = React.useMemo(() => {
-    if (!restrictRehab) return days;
+    if (!firstTimeRule) return days;
+    const slug = selectedService?.slug;
     return days.filter((day) => {
-      const d = parseLocalDateKey(day.date);
-      return isRehabFirstTimeDayAllowed(d.getDay());
+      if (!isFirstTimeDayAllowed(firstTimeRule, parseLocalDateKey(day.date).getDay())) {
+        return false;
+      }
+      if (slug && isFirstTimeDateBlocked(slug, day.date)) return false;
+      return true;
     });
-  }, [days, restrictRehab]);
+  }, [days, firstTimeRule, selectedService]);
 
-  // ── Filtrado de slots por reglas ───────────────────────────────────────
+  // ── Filtrado de slots por la ventana del primer turno ──────────────────
   const filteredSlots = React.useMemo(() => {
-    return slots.map((slot) => {
-      let available = slot.available;
-      let isBlocked = slot.isBlocked;
-      
-      // 1. Bloqueo de primera vez (general para cualquier servicio)
-      if (slot.firstTimeBlocked && esPrimeraVez) {
-        available = false;
-        isBlocked = true;
+    let _slots = slots;
+    
+    if (firstTimeRule && selectedDate) {
+      const slug = selectedService?.slug;
+      if (slug && isFirstTimeDateBlocked(slug, selectedDate)) {
+        _slots = _slots.map((slot) => ({ ...slot, available: false, isBlocked: true }));
+      } else {
+        const dayOfWeek = parseLocalDateKey(selectedDate).getDay();
+        _slots = _slots.map((slot) => {
+          const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
+          if (!isFirstTimeSlotAllowed(firstTimeRule, dayOfWeek, hour)) {
+            return { ...slot, available: false, isBlocked: true };
+          }
+          return slot;
+        });
       }
-      
-      // 2. Regla de ventana para el primer REHAB
-      if (restrictRehab && selectedDate) {
-        const d = parseLocalDateKey(selectedDate);
-        const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
-        if (!isRehabFirstTimeSlotAllowed(d.getDay(), hour)) {
-          available = false;
-          isBlocked = true;
+    }
+    
+    if (esPrimeraVez) {
+      _slots = _slots.map((slot) => {
+        if (slot.firstTimeBlocked) {
+          return { ...slot, available: false, isBlocked: true };
         }
-      }
-      
-      return { ...slot, available, isBlocked };
-    });
-  }, [slots, restrictRehab, selectedDate, esPrimeraVez]);
+        return slot;
+      });
+    }
+    
+    return _slots;
+  }, [slots, firstTimeRule, selectedDate, selectedService, esPrimeraVez]);
 
   // ── Fetch de días cuando cambia el servicio ────────────────────────────
   const fetchDays = React.useCallback(async (serviceId: string) => {
@@ -335,19 +359,16 @@ export function BookingFlow({
 
   return (
     <div className="space-y-4">
-      {/* Banner del primer turno de REHAB (solo si aplica la ventana) */}
-      {restrictRehab && (
+      {/* Banner del primer turno del servicio (solo si aplica la ventana) */}
+      {firstTimeRule && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-950/30">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
             <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-              Tu primer turno de rehabilitación
+              Tu primer turno
             </p>
             <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
-              Debe ser <strong>lunes a la tarde</strong>,{" "}
-              <strong>miércoles</strong> (todo el día) o{" "}
-              <strong>viernes a la mañana</strong>. A partir del segundo turno no
-              hay restricción.
+              {firstTimeRule.message} A partir del segundo turno no hay restricción.
             </p>
           </div>
         </div>
@@ -362,16 +383,20 @@ export function BookingFlow({
             selectedId={selectedService?.id ?? null}
             onSelect={handleServiceSelect}
           />
-          {selectedService && (
+          {selectedService && !kinesio40 && (
             <ServiceScheduleHint
               serviceName={selectedService.name}
               entries={schedules[selectedService.id] ?? []}
-              restrictRehab={restrictRehab}
+              firstTimeNote={firstTimeRule?.message ?? null}
             />
           )}
         </CardContent>
       </Card>
 
+      {kinesio40 ? (
+        <FirstTimeKinesioBooking />
+      ) : (
+        <>
       {/* Paso 2 — Día */}
       <Card className={cn("transition-opacity duration-300", !selectedService && "opacity-55 pointer-events-none")}>
         <CardContent className="space-y-4 p-5 sm:p-6">
@@ -384,54 +409,19 @@ export function BookingFlow({
             </div>
           ) : filteredDays.length === 0 ? (
             <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              {restrictRehab
-                ? REHAB_FIRST_TIME_EMPTY
+              {firstTimeRule
+                ? firstTimeRule.emptyMessage
                 : "No hay días disponibles para este servicio."}
             </p>
           ) : (
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {filteredDays.map((day) => {
-                const d = parseLocalDateKey(day.date);
-                const active = selectedDate === day.date;
-                const soldOut = day.availableSlots === 0;
-                return (
-                  <button
-                    key={day.date}
-                    type="button"
-                    onClick={() => selectDay(day.date)}
-                    aria-pressed={active}
-                    className={cn(
-                      "flex min-w-[4.5rem] flex-col items-center gap-0.5 rounded-lg border px-3 py-2 shadow-e1 transition-all duration-150 ease-out-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      active
-                        ? "border-primary bg-primary text-primary-foreground shadow-e2"
-                        : "hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-e2",
-                    )}
-                  >
-                    <span className="text-[0.7rem] font-medium uppercase">
-                      {format(d, "EEE", { locale: es })}
-                    </span>
-                    <span className="text-lg font-semibold tabular-nums leading-none">
-                      {format(d, "d")}
-                    </span>
-                    <span className="text-[0.7rem] font-medium capitalize -mt-0.5">
-                      {format(d, "MMM", { locale: es }).replace(/\.$/, "")}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[0.7rem]",
-                        active
-                          ? "text-primary-foreground/85"
-                          : soldOut
-                            ? "text-muted-foreground"
-                            : "text-primary",
-                      )}
-                    >
-                      {soldOut ? "lleno" : `${day.availableSlots} libres`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <DayPicker
+              days={filteredDays.map((day) => ({
+                date: day.date,
+                availableCount: day.availableSlots,
+              }))}
+              selectedDate={selectedDate}
+              onSelect={selectDay}
+            />
           )}
         </CardContent>
       </Card>
@@ -439,7 +429,7 @@ export function BookingFlow({
       {/* Aviso: ya tiene un turno ese día */}
       {selectedDate && sameDay.length > 0 && (
         <SameDayWarning
-          title={`Ya tenés un turno el ${formatDate(parseLocalDateKey(selectedDate))}`}
+          title={`Ya tenés un turno el ${formatDateKey(selectedDate)}`}
           bookings={sameDay}
           onCancel={handleCancelSameDay}
           cancelling={cancellingSameDay}
@@ -450,12 +440,12 @@ export function BookingFlow({
       <Card className={cn("transition-opacity duration-300", !selectedDate && "opacity-55")}>
         <CardContent className="space-y-4 p-5 sm:p-6">
           <StepHeader step={3} title="Elegí el horario" done={Boolean(selectedSlot)} />
-          {restrictRehab && selectedDate && (
+          {firstTimeRule && selectedDate && (
             <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5" />
               <span>
-                Para tu primer turno de rehabilitación, los horarios fuera de la
-                ventana permitida están deshabilitados.
+                Para tu primer turno, los horarios fuera de la ventana permitida
+                están deshabilitados.
               </span>
             </div>
           )}
@@ -523,6 +513,8 @@ export function BookingFlow({
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   );
 }

@@ -40,8 +40,8 @@ export const COVERAGE_TYPE_LABELS: Record<CoverageType, string> = {
   PARTICULAR: "Particular",
 };
 
-// La restricción de horarios del PRIMER turno de REHAB vive en
-// src/lib/rehab-first-time.ts (única fuente de verdad de esa regla).
+// La regla de horarios del PRIMER turno (por servicio) vive en
+// src/lib/first-time-rule.ts (única fuente de verdad de esa regla).
 
 // ── Configuración general (variables de entorno) ─────────────────────────────
 function intEnv(value: string | undefined, fallback: number): number {

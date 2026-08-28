@@ -150,11 +150,32 @@ export async function adminCancelBookingAction(
   input: unknown,
 ): Promise<ActionResult> {
   try {
-    await assertRole(ROLES.ADMIN);
+    const pro = await assertRole(ROLES.ADMIN);
     const { bookingId } = adminCancelSchema.parse(input);
-    await bookingService.adminCancel(bookingId);
+    await bookingService.adminCancel(bookingId, pro.id);
     revalidatePath("/admin/asistencias");
+    revalidatePath("/admin/pacientes");
+    revalidatePath("/admin");
     return ok(undefined);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
+/** Cancela como ADMIN toda una serie (turnos futuros). */
+export async function adminCancelSeriesAction(
+  input: unknown,
+): Promise<ActionResult<{ cancelled: number }>> {
+  try {
+    const pro = await assertRole(ROLES.ADMIN);
+    const { recurrenceId } = z
+      .object({ recurrenceId: z.string().uuid("Serie inválida") })
+      .parse(input);
+    const cancelled = await bookingService.adminCancelSeries(recurrenceId, pro.id);
+    revalidatePath("/admin/asistencias");
+    revalidatePath("/admin/pacientes");
+    revalidatePath("/admin");
+    return ok({ cancelled });
   } catch (error) {
     return fromError(error);
   }

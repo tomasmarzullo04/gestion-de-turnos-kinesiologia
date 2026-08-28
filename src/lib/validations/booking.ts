@@ -40,7 +40,20 @@ export const cancelSeriesSchema = z.object({
   recurrenceId: z.string().uuid("Serie inválida"),
 });
 
+/** Reserva de un turno individual de 40 min (primer turno de Kinesiología). */
+export const bookFirstTimeKinesioSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horario inválido"),
+  notes: z
+    .string()
+    .max(500, "Las notas son demasiado largas")
+    .trim()
+    .optional()
+    .or(z.literal("")),
+});
+
 export type BookSlotInput = z.infer<typeof bookSlotSchema>;
 export type CancelBookingInput = z.infer<typeof cancelBookingSchema>;
 export type BookSeriesInput = z.infer<typeof bookSeriesSchema>;
 export type CancelSeriesInput = z.infer<typeof cancelSeriesSchema>;
+export type BookFirstTimeKinesioInput = z.infer<typeof bookFirstTimeKinesioSchema>;

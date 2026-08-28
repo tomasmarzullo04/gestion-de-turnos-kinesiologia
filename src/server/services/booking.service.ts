@@ -9,10 +9,18 @@ import {
   type Role,
 } from "@/lib/constants";
 import {
-  REHAB_FIRST_TIME_MESSAGE,
-  REHAB_SLUG,
-  isRehabFirstTimeSlotAllowed,
-} from "@/lib/rehab-first-time";
+  FIRST_TIME_RULE_SLUGS,
+  KINESIO_SLUG,
+  classifyFranja,
+  firstTimeBlockedMessage,
+  firstTimeGridFromFranjas,
+  getFirstTimeRule,
+  isFirstTimeDateBlocked,
+  isFirstTimeSlotAllowed,
+  isValidFirstTimeGridSlot,
+  type Franja,
+} from "@/lib/first-time-rule";
+import { BOOKING_CONFIG } from "@/lib/booking-config";
 import { parseLocalDateKey, toLocalDateKey } from "@/lib/datetime";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -134,25 +142,42 @@ export const bookingService = {
       );
     }
 
-    // ── Regla acotada: PRIMER turno de REHAB ──────────────────────────────
-    // Solo aplica al servicio REHAB. La restricción de ventana se mantiene
-    // hasta que el paciente ASISTIÓ a una sesión de REHAB (asistencia PRESENT);
-    // ver `puedeReservarRehabLibre`. Mientras no haya un PRESENT, TODA reserva
-    // REHAB nueva debe caer en ventana, sin importar cuántas futuras ya tenga.
-    // Validamos contra el servicio REAL de la franja (no un parámetro que el
-    // cliente podría falsear): el servidor es la verdad; la UI solo refleja.
+    // ── Regla acotada: PRIMER turno del servicio (por servicio) ───────────
+    // Aplica solo a servicios con regla (ver first-time-rule.ts). La restricción
+    // de ventana se mantiene hasta que el paciente ASISTIÓ a una sesión de ESE
+    // servicio (asistencia PRESENT); ver `hasClearedFirstTime`. Mientras no haya
+    // un PRESENT, TODA reserva nueva de ese servicio debe caer en ventana, sin
+    // importar cuántas futuras ya tenga. Validamos contra el servicio REAL de la
+    // franja (no un parámetro que el cliente podría falsear): el servidor es la
+    // verdad; la UI solo refleja.
     //
     // Concurrencia: el estado "libre" solo se activa al marcar asistencia
-    // PRESENT (acción del profesional), nunca desde el flujo de reserva. Por
-    // eso dos reservas REHAB casi simultáneas leen ambas "no libre" → ambas
-    // quedan limitadas a la ventana y ninguna fuera de ventana puede colarse.
-    if (slot.service_slug === REHAB_SLUG && slot.service_id) {
-      const libre = await this.puedeReservarRehabLibre(userId);
-      if (
-        !libre &&
-        !isRehabFirstTimeSlotAllowed(slot.day_of_week, slot.start_hour)
-      ) {
-        throw new BusinessError(REHAB_FIRST_TIME_MESSAGE);
+    // PRESENT (acción del profesional), nunca desde el flujo de reserva. Por eso
+    // dos reservas casi simultáneas leen ambas "no libre" → ambas quedan
+    // limitadas a la ventana y ninguna fuera de ventana puede colarse.
+    const rule = getFirstTimeRule(slot.service_slug);
+    if (rule && slot.service_id) {
+      const cleared = await this.hasClearedFirstTime(userId, rule.slug);
+      if (!cleared) {
+        // Excepción puntual por fecha (solo primerizos): si el día de la franja
+        // está bloqueado para el primer turno de ese servicio, se rechaza. No
+        // toca a no-primerizos (no entran acá) ni a la carga del profesional
+        // (adminBook). `slot.date` es la fecha de calendario (día local) de la
+        // franja, así que compara el día correcto.
+        if (isFirstTimeDateBlocked(rule.slug, slot.date)) {
+          throw new BusinessError(firstTimeBlockedMessage(rule.slug, slot.date));
+        }
+        // Autoridad del modo especial: si el servicio usa turnos individuales
+        // (kinesio primer turno), la franja POR HORA no es válida → debe usar el
+        // flujo de 40 min. Solo aplica al camino del paciente (este `book`).
+        if (rule.firstTimeSlotMinutes) {
+          throw new BusinessError(
+            "Tu primer turno de kinesiología es en turnos individuales de 40 minutos. Elegilo desde la lista de turnos disponibles.",
+          );
+        }
+        if (!isFirstTimeSlotAllowed(rule, slot.day_of_week, slot.start_hour)) {
+          throw new BusinessError(rule.message);
+        }
       }
     }
 
@@ -240,11 +265,12 @@ export const bookingService = {
       throw new BusinessError("Esa franja ya pasó. Elegí un horario futuro.");
     }
 
-    // Regla del primer REHAB (se respeta incluso en sobrecupo).
-    if (slot.service_slug === REHAB_SLUG && slot.service_id) {
-      const libre = await this.puedeReservarRehabLibre(userId);
-      if (!libre && !isRehabFirstTimeSlotAllowed(slot.dow, slot.hour)) {
-        throw new BusinessError(REHAB_FIRST_TIME_MESSAGE);
+    // Regla del primer turno del servicio (se respeta incluso en sobrecupo).
+    const rule = getFirstTimeRule(slot.service_slug);
+    if (rule && slot.service_id) {
+      const cleared = await this.hasClearedFirstTime(userId, rule.slug);
+      if (!cleared && !isFirstTimeSlotAllowed(rule, slot.dow, slot.hour)) {
+        throw new BusinessError(rule.message);
       }
     }
 
@@ -335,7 +361,7 @@ export const bookingService = {
    * Cancela como ADMIN: resuelve el dueño de la reserva y llama a la función
    * con ese user_id (la función valida pertenencia). Sin ventana de antelación.
    */
-  async adminCancel(bookingId: string): Promise<void> {
+  async adminCancel(bookingId: string, adminId?: string): Promise<void> {
     const rows = await prisma.$queryRaw<{ user_id: string }[]>`
       SELECT user_id FROM bookings
       WHERE id = ${bookingId}::uuid AND status <> 'CANCELLED'
@@ -348,9 +374,47 @@ export const bookingService = {
       await prisma.$executeRaw`
         SELECT cancel_booking(${bookingId}::uuid, ${ownerId}::text)
       `;
-      logger.info("Reserva cancelada por admin", { bookingId });
+      await this.auditCancel(bookingId, adminId);
+      logger.info("Reserva cancelada por admin", { bookingId, adminId });
     } catch (error) {
       rethrowAsBusiness(error);
+    }
+  },
+
+  /**
+   * Cancela como ADMIN todos los turnos FUTUROS de una serie (turno fijo). Cada
+   * fecha pasa por `cancel_booking` (atómico, libera cupo). Los pasados no se
+   * tocan. Devuelve cuántos se cancelaron.
+   */
+  async adminCancelSeries(recurrenceId: string, adminId?: string): Promise<number> {
+    const future = await prisma.$queryRaw<{ id: string; user_id: string }[]>`
+      SELECT b.id, b.user_id
+      FROM bookings b
+      JOIN slots s ON s.id = b.slot_id
+      WHERE b.recurrence_id = ${recurrenceId}::uuid
+        AND b.status <> 'CANCELLED'
+        AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) >= now()
+    `;
+    for (const row of future) {
+      await prisma.$executeRaw`
+        SELECT cancel_booking(${row.id}::uuid, ${row.user_id}::text)
+      `;
+      await this.auditCancel(row.id, adminId);
+    }
+    logger.info("Serie cancelada por admin", { recurrenceId, adminId, cancelled: future.length });
+    return future.length;
+  },
+
+  /** Auditoría de cancelación (best-effort: no rompe si faltan las columnas). */
+  async auditCancel(bookingId: string, adminId?: string): Promise<void> {
+    if (!adminId) return;
+    try {
+      await prisma.$executeRaw`
+        UPDATE bookings SET cancelled_by = ${adminId}, cancelled_at = now()
+        WHERE id = ${bookingId}::uuid
+      `;
+    } catch {
+      /* columnas cancelled_by/at pendientes de migración */
     }
   },
 
@@ -440,30 +504,277 @@ export const bookingService = {
   },
 
   /**
-   * ¿El paciente puede reservar REHAB SIN restricción de horarios?
+   * ¿El paciente ya CUMPLIÓ el primer turno de un servicio (Opción B)?
    *
-   * Criterio (Opción B, confirmado por el negocio): la restricción del primer
-   * turno se levanta SOLO cuando el paciente YA ASISTIÓ a una sesión de REHAB,
-   * es decir, cuando existe una reserva REHAB suya con asistencia PRESENT.
+   * La restricción de ventana se levanta SOLO cuando existe una reserva de ESE
+   * servicio con asistencia PRESENT. Tener reservas futuras NO alcanza: hasta
+   * que haya un PRESENT, toda reserva nueva del servicio debe caer en ventana.
    *
-   * Tener reservas REHAB futuras NO alcanza: una reserva no cumplida no
-   * significa que ya hizo su primera sesión. Hasta que haya un PRESENT, TODA
-   * reserva REHAB nueva debe caer en ventana permitida.
-   *
-   * Es la ÚNICA fuente de verdad: la usan tanto la UI como el servidor.
+   * Fuente de verdad única: la usan la UI y el servidor. Identifica el servicio
+   * por `slug` (estable), nunca por nombre.
    */
-  async puedeReservarRehabLibre(userId: string): Promise<boolean> {
+  async hasClearedFirstTime(userId: string, slug: string): Promise<boolean> {
     const rows = await prisma.$queryRaw<{ ok: boolean }[]>`
       SELECT EXISTS (
         SELECT 1
         FROM bookings b
         JOIN attendances a ON a.booking_id = b.id
         WHERE b.user_id = ${userId}::text
-          AND b.service_id = (SELECT id FROM services WHERE slug = ${REHAB_SLUG})
+          AND b.service_id = (SELECT id FROM services WHERE slug = ${slug})
           AND a.status = 'PRESENT'
       ) AS ok
     `;
     return rows[0]?.ok ?? false;
+  },
+
+  /**
+   * ¿El paciente YA tiene reservado (a futuro) su turno especial de 40 min de
+   * primer turno de kinesio? El horario especial es UNA sola vez: mientras haya
+   * una reserva CONFIRMED sobre una franja `is_first_time` de kinesio con fecha
+   * futura, no se le ofrece —ni puede sacar— otro. Recién cuando ASISTA
+   * (PRESENT → `hasClearedFirstTime`) pasa a los turnos normales por hora.
+   *
+   * Identifica el servicio por `slug` (estable), nunca por nombre.
+   */
+  async hasUpcomingFirstTimeKinesioBooking(userId: string): Promise<boolean> {
+    const rows = await prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM bookings b
+        JOIN slots s ON s.id = b.slot_id
+        WHERE b.user_id = ${userId}::text
+          AND b.status = 'CONFIRMED'
+          AND s.is_first_time = true
+          AND s.service_id = (SELECT id FROM services WHERE slug = ${KINESIO_SLUG})
+          AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+      ) AS ok
+    `;
+    return rows[0]?.ok ?? false;
+  },
+
+  /**
+   * Slugs con regla de primer turno que el paciente TODAVÍA no cumplió (sigue
+   * restringido a ventana). Para que la UI refleje la restricción por servicio.
+   */
+  async getFirstTimeRestrictedSlugs(userId: string): Promise<string[]> {
+    const restricted: string[] = [];
+    for (const slug of FIRST_TIME_RULE_SLUGS) {
+      const cleared = await this.hasClearedFirstTime(userId, slug);
+      if (!cleared) restricted.push(slug);
+    }
+    return restricted;
+  },
+
+  // ── Caso especial: primer turno de Kinesiología en turnos de 40 min ────────
+  // Aislado detrás de (kinesio + primerizo). NO toca el flujo por hora.
+
+  /**
+   * Franjas ACTIVAS de la plantilla de un servicio, agrupadas por día de la
+   * semana (0=domingo, igual que Date.getDay()). Fuente de verdad de los
+   * HORARIOS/cortes de la grilla de 40 min. Loguea si alguna franja cruza el
+   * mediodía (no se puede clasificar mañana/tarde).
+   */
+  async getTemplateFranjasByDow(serviceId: string): Promise<Map<number, Franja[]>> {
+    const rows = await prisma.$queryRaw<{ dow: number; start: string; end: string }[]>`
+      SELECT day_of_week AS dow,
+             to_char(start_time, 'HH24:MI') AS start,
+             to_char(end_time, 'HH24:MI')   AS end
+      FROM slot_templates
+      WHERE service_id = ${serviceId}::uuid AND active
+    `;
+    const map = new Map<number, Franja[]>();
+    for (const r of rows) {
+      if (classifyFranja({ start: r.start, end: r.end }) === null) {
+        logger.warn("Franja de plantilla cruza el mediodía; no se clasifica para 40 min", {
+          serviceId,
+          dow: r.dow,
+          franja: `${r.start}-${r.end}`,
+        });
+      }
+      const arr = map.get(r.dow) ?? [];
+      arr.push({ start: r.start, end: r.end });
+      map.set(r.dow, arr);
+    }
+    return map;
+  },
+
+  /**
+   * Disponibilidad VIRTUAL de turnos individuales de 40 min para el primer turno
+   * de kinesio. La grilla es la INTERSECCIÓN plantilla ∩ regla de negocio (los
+   * horarios salen de la plantilla; qué parte del día, de la regla). No
+   * materializa nada; marca como tomados los turnos ya reservados.
+   *
+   * Devuelve `{ alreadyBooked, days }`:
+   *  - `days: []` si el paciente ya cumplió o el servicio no tiene el modo.
+   *  - `alreadyBooked: true` (y `days: []`) si YA reservó su turno especial a
+   *    futuro: el horario especial es UNA sola vez, así que en vez de la grilla
+   *    la UI muestra el mensaje de "ya tenés tu primer turno reservado".
+   */
+  async getFirstTimeKinesioAvailability(
+    userId: string,
+  ): Promise<{
+    alreadyBooked: boolean;
+    days: { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[];
+  }> {
+    const rule = getFirstTimeRule(KINESIO_SLUG);
+    if (!rule?.firstTimeSlotMinutes) return { alreadyBooked: false, days: [] };
+    if (await this.hasClearedFirstTime(userId, KINESIO_SLUG)) {
+      return { alreadyBooked: false, days: [] };
+    }
+    // El especial es una sola vez: si ya tiene un 40 min a futuro, no ofrecemos
+    // la grilla; la UI muestra el mensaje correspondiente.
+    if (await this.hasUpcomingFirstTimeKinesioBooking(userId)) {
+      return { alreadyBooked: true, days: [] };
+    }
+
+    const svc = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM services WHERE slug = ${KINESIO_SLUG}
+    `;
+    const serviceId = svc[0]?.id;
+    if (!serviceId) return { alreadyBooked: false, days: [] };
+
+    // Horarios reales de cada día (plantilla de Kinesiología).
+    const franjasByDow = await this.getTemplateFranjasByDow(serviceId);
+
+    // Turnos de 40 min ya tomados (materializados y con cupo ocupado).
+    const takenRows = await prisma.$queryRaw<{ d: string; t: string }[]>`
+      SELECT to_char(date, 'YYYY-MM-DD') AS d, to_char(start_time, 'HH24:MI') AS t
+      FROM slots
+      WHERE service_id = ${serviceId}::uuid
+        AND is_first_time = true
+        AND booked_count >= 1
+        AND date >= current_date
+    `;
+    const taken = new Set(takenRows.map((r) => `${r.d}|${r.t}`));
+
+    // "Ahora" en hora de Argentina, para descartar turnos pasados de hoy.
+    const nowRows = await prisma.$queryRaw<{ now_key: string; now_hm: string }[]>`
+      SELECT to_char(now() AT TIME ZONE ${TIMEZONE}, 'YYYY-MM-DD') AS now_key,
+             to_char(now() AT TIME ZONE ${TIMEZONE}, 'HH24:MI')   AS now_hm
+    `;
+    const nowKey = nowRows[0]?.now_key ?? "";
+    const nowHm = nowRows[0]?.now_hm ?? "";
+
+    const today = parseLocalDateKey(toLocalDateKey(new Date()));
+    const out: {
+      date: string;
+      turnos: { startTime: string; endTime: string; available: boolean }[];
+    }[] = [];
+
+    for (let i = 0; i < BOOKING_CONFIG.generationDays; i++) {
+      const d = addDays(today, i);
+      const dateKey = format(d, "yyyy-MM-dd");
+      // Excepción puntual: fecha bloqueada para el primer turno → no se ofrece.
+      // `dateKey` sale de `today` en hora Argentina, así que compara el día local.
+      if (isFirstTimeDateBlocked(KINESIO_SLUG, dateKey)) continue;
+      const grid = firstTimeGridFromFranjas(rule, d.getDay(), franjasByDow.get(d.getDay()) ?? []);
+      if (grid.length === 0) continue;
+
+      const turnos = grid
+        .filter((g) => !(dateKey === nowKey && g.start <= nowHm))
+        .map((g) => ({
+          startTime: g.start,
+          endTime: g.end,
+          available: !taken.has(`${dateKey}|${g.start}`),
+        }));
+      if (turnos.length > 0) out.push({ date: dateKey, turnos });
+    }
+    return { alreadyBooked: false, days: out };
+  },
+
+  /**
+   * Reserva un turno individual de 40 min del primer turno de kinesio. Valida
+   * (primerizo + día en ventana + hora alineada a la grilla + futuro),
+   * materializa el slot cap 1 de forma atómica (índice único parcial) y reserva
+   * con `book_slot` (mismo mecanismo de siempre → concurrencia garantizada).
+   */
+  async bookFirstTimeKinesio(params: {
+    userId: string;
+    date: string;
+    startTime: string;
+    notes?: string | null;
+  }): Promise<{
+    bookingId: string | null;
+    serviceId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+  }> {
+    const { userId, date, startTime, notes } = params;
+
+    const rule = getFirstTimeRule(KINESIO_SLUG);
+    if (!rule?.firstTimeSlotMinutes) {
+      throw new BusinessError("Este modo no está disponible.");
+    }
+    if (await this.hasClearedFirstTime(userId, KINESIO_SLUG)) {
+      throw new BusinessError("Ya no estás en tu primer turno de kinesiología.");
+    }
+    // Autoridad del servidor: el turno especial de 40 min es UNA sola vez. Si el
+    // paciente ya tiene uno reservado a futuro, se rechaza (no puede pre-reservar
+    // varios). Recién cuando asista pasa a los turnos normales por hora.
+    if (await this.hasUpcomingFirstTimeKinesioBooking(userId)) {
+      throw new BusinessError(
+        "Ya tenés tu primer turno de kinesiología reservado. Cuando asistas, vas a poder sacar turnos normales.",
+      );
+    }
+    // Excepción puntual por fecha (solo primerizos): `date` es la fecha-clave en
+    // hora Argentina que eligió el paciente. Autoridad del servidor.
+    if (isFirstTimeDateBlocked(KINESIO_SLUG, date)) {
+      throw new BusinessError(firstTimeBlockedMessage(KINESIO_SLUG, date));
+    }
+
+    const svc = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM services WHERE slug = ${KINESIO_SLUG}
+    `;
+    const serviceId = svc[0]?.id;
+    if (!serviceId) throw new BusinessError("Servicio no encontrado.");
+
+    // Autoridad del servidor: el turno debe caer en la grilla INTERSECTADA
+    // (franjas reales de la plantilla ∩ parte del día permitida por la regla).
+    // Un turno fuera de las franjas de la plantilla se rechaza.
+    const day = parseLocalDateKey(date);
+    const franjas = (await this.getTemplateFranjasByDow(serviceId)).get(day.getDay()) ?? [];
+    const { valid, endTime } = isValidFirstTimeGridSlot(rule, day.getDay(), franjas, startTime);
+    if (!valid || !endTime) {
+      throw new BusinessError("Ese horario no es un turno válido para el primer turno de kinesiología.");
+    }
+
+    const fut = await prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT ((${date}::date + ${startTime}::time) AT TIME ZONE ${TIMEZONE}) > now() AS ok
+    `;
+    if (!fut[0]?.ok) {
+      throw new BusinessError("Ese turno ya pasó. Elegí uno futuro.");
+    }
+
+    // Materialización atómica: 1 solo slot por (servicio, fecha, hora) gracias al
+    // índice único parcial. Si ya existe (otro lo materializó), lo tomamos.
+    const ins = await prisma.$queryRaw<{ id: string }[]>`
+      INSERT INTO slots (professional_id, service_id, date, start_time, end_time, capacity, is_first_time)
+      VALUES (NULL, ${serviceId}::uuid, ${date}::date, ${startTime}::time, ${endTime}::time, 1, true)
+      ON CONFLICT (service_id, date, start_time) WHERE is_first_time DO NOTHING
+      RETURNING id
+    `;
+    let slotId = ins[0]?.id ?? null;
+    if (!slotId) {
+      const existing = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM slots
+        WHERE service_id = ${serviceId}::uuid AND is_first_time = true
+          AND date = ${date}::date AND start_time = ${startTime}::time
+      `;
+      slotId = existing[0]?.id ?? null;
+    }
+    if (!slotId) throw new BusinessError("No se pudo reservar el turno. Reintentá.");
+
+    try {
+      const booked = await prisma.$queryRaw<{ booking_id: string | null }[]>`
+        SELECT b.id AS booking_id
+        FROM book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+      `;
+      logger.info("Primer turno de kinesio (40 min) reservado", { userId, date, startTime });
+      return { bookingId: booked[0]?.booking_id ?? null, serviceId, date, startTime, endTime };
+    } catch (error) {
+      rethrowAsBusiness(error);
+    }
   },
 
   /** Horarios de inicio disponibles (distintos) de un servicio a futuro. */
@@ -474,6 +785,7 @@ export const bookingService = {
       WHERE service_id = ${serviceId}::uuid
         AND date >= current_date
         AND NOT is_blocked
+        AND NOT is_first_time
       ORDER BY start_time
     `;
     return rows.map((r) => r.start_time);
@@ -518,12 +830,12 @@ export const bookingService = {
     const maxEnd = addDays(today, 120);
     const lastDate = end > maxEnd ? maxEnd : end;
 
-    // ¿Es REHAB? ¿El paciente está libre de la restricción de ventana?
+    // ¿El servicio tiene regla de primer turno? ¿El paciente ya la cumplió?
     const svc = await prisma.$queryRaw<{ slug: string }[]>`
       SELECT slug FROM services WHERE id = ${serviceId}::uuid
     `;
-    const isRehab = svc[0]?.slug === REHAB_SLUG;
-    const rehabLibre = isRehab ? await this.puedeReservarRehabLibre(userId) : true;
+    const rule = getFirstTimeRule(svc[0]?.slug);
+    const cleared = rule ? await this.hasClearedFirstTime(userId, rule.slug) : true;
 
     const recurrenceId = randomUUID();
     const days = new Set(daysOfWeek);
@@ -553,7 +865,7 @@ export const bookingService = {
         continue;
       }
 
-      if (isRehab && !rehabLibre && !isRehabFirstTimeSlotAllowed(slot.dow, slot.hour)) {
+      if (rule && !cleared && !isFirstTimeSlotAllowed(rule, slot.dow, slot.hour)) {
         results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "rehab_window" });
         continue;
       }

@@ -59,26 +59,25 @@ export function isValidTimeString(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
-// ── Formateadores para UI (locale es, TZ consultoría) ────────────────────────
+// ── Formateo de FECHAS-CLAVE de calendario ("YYYY-MM-DD") ────────────────────
+//
+// IMPORTANTE: estos formateadores son para fechas de CALENDARIO puras (p. ej.
+// `booking.date` = "2026-08-21"), que NO tienen hora ni zona horaria. Formatean
+// la fecha tal cual, SIN conversión de TZ, así el día mostrado es el mismo en el
+// servidor (UTC) y en el navegador (Argentina). Fuente de verdad única para
+// mostrar el DÍA de un turno.
+//
+// NO usar para instantes reales (timestamptz: now(), created_at, asistencia con
+// hora real): para eso está la conversión utcToZoned/zonedToUtc.
 
-export function formatDate(date: Date): string {
-  return format(utcToZoned(date), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
+/** Fecha-clave "YYYY-MM-DD" → "viernes 21 de agosto de 2026" (sin conversión de TZ). */
+export function formatDateKey(key: string): string {
+  return format(parseLocalDateKey(key), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
 }
 
-export function formatDateShort(date: Date): string {
-  return format(utcToZoned(date), "dd/MM/yyyy", { locale: es });
-}
-
-export function formatTime(date: Date): string {
-  return format(utcToZoned(date), "HH:mm", { locale: es });
-}
-
-export function formatDateTime(date: Date): string {
-  return format(utcToZoned(date), "EEE d MMM yyyy · HH:mm", { locale: es });
-}
-
-export function formatDayMonth(date: Date): string {
-  return format(utcToZoned(date), "d 'de' MMMM", { locale: es });
+/** Fecha-clave "YYYY-MM-DD" → "21/08/2026" (sin conversión de TZ). */
+export function formatDateKeyShort(key: string): string {
+  return format(parseLocalDateKey(key), "dd/MM/yyyy", { locale: es });
 }
 
 /** Devuelve "YYYY-MM-DD" en la TZ de la consultoría (útil como key de día). */

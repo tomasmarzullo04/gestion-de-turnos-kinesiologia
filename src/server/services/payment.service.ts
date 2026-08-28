@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
-import { TIMEZONE } from "@/lib/constants";
 import { prisma } from "@/lib/db";
+import { getCycleRange, shiftCycle } from "@/lib/financial-cycle";
 import { logger } from "@/lib/logger";
 
 const DEFAULT_COPAGO = 4000;
@@ -34,7 +34,7 @@ export interface ServiceRevenue {
   total: number;
 }
 
-export interface MonthlySummary {
+export interface PeriodSummary {
   totalCopagos: number;
   totalExtras: number;
   total: number;
@@ -79,17 +79,20 @@ export const paymentService = {
     unitAmount: number;
     paidAt: string;
     recordedById: string;
-    serviceId?: string;
+    serviceId: string;
   }): Promise<void> {
     const total = input.quantity * input.unitAmount;
     const [y, m] = input.paidAt.split("-").map(Number);
-    const sid = input.serviceId ?? null;
+    // paid_at es una FECHA de calendario (la que eligió el usuario). La guardamos
+    // como medianoche UTC de ESE día, de forma determinista (sin depender de la
+    // zona de sesión de la DB) y la leemos igual (AT TIME ZONE 'UTC') → el día
+    // mostrado siempre coincide con el elegido.
     await prisma.$executeRaw`
       INSERT INTO payments
         (user_id, type, amount, quantity, period_month, period_year, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'COPAGO', ${total}, ${input.quantity},
-         ${m}, ${y}, ${input.paidAt}::date, ${input.recordedById}, ${sid}::uuid)
+         ${m}, ${y}, (${input.paidAt}::date) AT TIME ZONE 'UTC', ${input.recordedById}, ${input.serviceId}::uuid)
     `;
   },
 
@@ -100,16 +103,15 @@ export const paymentService = {
     concept: string;
     paidAt: string;
     recordedById: string;
-    serviceId?: string;
+    serviceId: string;
   }): Promise<void> {
     const [y, m] = input.paidAt.split("-").map(Number);
-    const sid = input.serviceId ?? null;
     await prisma.$executeRaw`
       INSERT INTO payments
         (user_id, type, amount, quantity, period_month, period_year, concept, paid_at, recorded_by_id, service_id)
       VALUES
         (${input.userId}, 'EXTRA', ${input.amount}, 1,
-         ${m}, ${y}, ${input.concept}, ${input.paidAt}::date, ${input.recordedById}, ${sid}::uuid)
+         ${m}, ${y}, ${input.concept}, (${input.paidAt}::date) AT TIME ZONE 'UTC', ${input.recordedById}, ${input.serviceId}::uuid)
     `;
   },
 
@@ -126,10 +128,27 @@ export const paymentService = {
     `;
   },
 
-  /** Resumen económico de un mes: totales (en base), contadores y movimientos. */
-  async getMonthlySummary(month: number, year: number, serviceId?: string): Promise<MonthlySummary> {
-    const prev = month === 1 ? { m: 12, y: year - 1 } : { m: month - 1, y: year };
-    
+  /**
+   * Resumen económico de un PERÍODO financiero (ciclo del 15 al 15): totales
+   * (en base), contadores y movimientos. `month`/`year` identifican el ciclo por
+   * su mes/año de INICIO (el día de corte). Ej: (8, 2026) = 15/08 → 14/09.
+   *
+   * La agrupación se hace por `paid_at` dentro del rango del ciclo (half-open
+   * [inicio, siguiente corte)), leyendo la fecha con `AT TIME ZONE 'UTC'` —el
+   * mismo criterio con que se guarda— para que el corte respete el día elegido
+   * sin desfases de zona horaria. Ciclos contiguos ⇒ ningún pago queda fuera ni
+   * se cuenta dos veces.
+   */
+  async getPeriodSummary(month: number, year: number, serviceId?: string): Promise<PeriodSummary> {
+    const cur = getCycleRange(month, year);
+    const prevCycle = shiftCycle(month, year, -1);
+    const prv = getCycleRange(prevCycle.month, prevCycle.year);
+
+    // Rango del ciclo por fecha de pago (misma lectura UTC que en el INSERT).
+    const inCurrent = Prisma.sql`(paid_at AT TIME ZONE 'UTC')::date >= ${cur.startKey}::date AND (paid_at AT TIME ZONE 'UTC')::date < ${cur.endExclusiveKey}::date`;
+    const inCurrentP = Prisma.sql`(p.paid_at AT TIME ZONE 'UTC')::date >= ${cur.startKey}::date AND (p.paid_at AT TIME ZONE 'UTC')::date < ${cur.endExclusiveKey}::date`;
+    const inPrev = Prisma.sql`(paid_at AT TIME ZONE 'UTC')::date >= ${prv.startKey}::date AND (paid_at AT TIME ZONE 'UTC')::date < ${prv.endExclusiveKey}::date`;
+
     let serviceFilter = Prisma.empty;
     let pServiceFilter = Prisma.empty;
     if (serviceId) {
@@ -142,7 +161,7 @@ export const paymentService = {
       }
     }
 
-    const empty: MonthlySummary = {
+    const empty: PeriodSummary = {
       totalCopagos: 0,
       totalExtras: 0,
       total: 0,
@@ -171,12 +190,12 @@ export const paymentService = {
           count(*)::int                                                AS payment_count,
           count(DISTINCT user_id)::int                                 AS payers
         FROM payments
-        WHERE period_year = ${year} AND period_month = ${month} AND voided_at IS NULL ${serviceFilter}
+        WHERE ${inCurrent} AND voided_at IS NULL ${serviceFilter}
       `,
       prisma.$queryRaw<{ total: number }[]>`
         SELECT coalesce(sum(amount), 0)::int AS total
         FROM payments
-        WHERE period_year = ${prev.y} AND period_month = ${prev.m} AND voided_at IS NULL ${serviceFilter}
+        WHERE ${inPrev} AND voided_at IS NULL ${serviceFilter}
       `,
       prisma.$queryRaw<
         {
@@ -191,13 +210,13 @@ export const paymentService = {
         }[]
       >`
         SELECT p.id, p.type, p.amount, p.quantity, p.concept,
-               to_char(p.paid_at AT TIME ZONE ${TIMEZONE}, 'YYYY-MM-DD') AS paid_at,
+               to_char(p.paid_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS paid_at,
                u.name AS patient_name,
                sv.name AS service_name
         FROM payments p
         LEFT JOIN "User" u ON u.id = p.user_id
         LEFT JOIN services sv ON sv.id = p.service_id
-        WHERE p.period_year = ${year} AND p.period_month = ${month} AND p.voided_at IS NULL ${pServiceFilter}
+        WHERE ${inCurrentP} AND p.voided_at IS NULL ${pServiceFilter}
         ORDER BY p.paid_at DESC, p.recorded_at DESC
       `,
       // ── Desglose de ingresos por servicio ────────────────────────────────
@@ -216,8 +235,7 @@ export const paymentService = {
           coalesce(sum(p.amount), 0)::int   AS total
         FROM payments p
         LEFT JOIN services sv ON sv.id = p.service_id
-        WHERE p.period_year = ${year}
-          AND p.period_month = ${month}
+        WHERE ${inCurrentP}
           AND p.voided_at IS NULL
           ${pServiceFilter}
         GROUP BY p.service_id, sv.name, sv.color

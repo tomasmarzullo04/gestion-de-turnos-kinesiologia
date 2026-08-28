@@ -22,13 +22,12 @@ export function OccupancyBarChart({ data }: { data: SlotOccupancy[] }) {
   // Adaptamos colores según si estamos en modo claro o oscuro. Usaremos variables CSS para mayor exactitud pero Recharts necesita strings para fill.
   const isDark = theme === "dark";
   const primaryColor = isDark ? "#2e70c2" : "#14335c"; // Navy/Azul para primary look
-  const freeColor = isDark ? "#3f3f46" : "#e4e4e7"; // zinc-700 / zinc-200
 
   if (data.length === 0) {
     return (
       <Card className="h-full">
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Ocupación por Franja</CardTitle>
+          <CardTitle className="text-base font-semibold">Reservas por franja (Hoy)</CardTitle>
         </CardHeader>
         <CardContent className="flex h-[300px] items-center justify-center">
           <EmptyState
@@ -44,7 +43,7 @@ export function OccupancyBarChart({ data }: { data: SlotOccupancy[] }) {
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle className="text-base font-semibold">Ocupación por Franja (Hoy)</CardTitle>
+        <CardTitle className="text-base font-semibold">Reservas por franja (Hoy)</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[300px] w-full">
@@ -61,9 +60,10 @@ export function OccupancyBarChart({ data }: { data: SlotOccupancy[] }) {
                 tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }} 
                 dy={10}
               />
-              <YAxis 
-                tickLine={false} 
-                axisLine={false} 
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
                 tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }}
               />
               <Tooltip
@@ -78,20 +78,11 @@ export function OccupancyBarChart({ data }: { data: SlotOccupancy[] }) {
                 itemStyle={{ color: isDark ? "#f4f4f5" : "#09090b" }}
                 labelStyle={{ fontWeight: "bold", marginBottom: "4px" }}
               />
-              <Bar 
-                dataKey="booked" 
-                name="Reservados" 
-                stackId="a" 
-                fill={primaryColor} 
-                radius={[0, 0, 4, 4]} 
-                isAnimationActive={false} // Respeta prefers-reduced-motion si es necesario, o se puede habilitar si se desea
-              />
-              <Bar 
-                dataKey="free" 
-                name="Libres" 
-                stackId="a" 
-                fill={freeColor} 
-                radius={[4, 4, 0, 0]} 
+              <Bar
+                dataKey="booked"
+                name="Reservados"
+                fill={primaryColor}
+                radius={[4, 4, 0, 0]}
                 isAnimationActive={false}
               />
             </BarChart>
