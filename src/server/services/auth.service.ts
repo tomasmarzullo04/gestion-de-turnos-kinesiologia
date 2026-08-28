@@ -36,8 +36,8 @@ export const authService = {
       phone: input.phone ? input.phone : null,
       tipoCoberturaString: input.tipoCobertura,
       obraSocialNombre: input.obraSocialNombre ?? null,
-      requiereCopago: input.requiereCopago,
-      montoCopago: input.montoCopago ?? null,
+      requiereCopago: false,
+      montoCopago: null,
       esPrimeraVez: input.esPrimeraVez,
     });
 

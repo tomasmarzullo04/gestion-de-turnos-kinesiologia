@@ -41,8 +41,6 @@ export const registerSchema = z
     confirmPassword: z.string().min(1, "Confirmá la contraseña"),
     tipoCobertura: z.enum(["OBRA_SOCIAL", "PARTICULAR"]),
     obraSocialNombre: z.string().optional(),
-    requiereCopago: z.boolean().default(false),
-    montoCopago: z.number().min(0, "Monto inválido").optional().nullable(),
     esPrimeraVez: z.boolean().default(true),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -59,18 +57,6 @@ export const registerSchema = z
     {
       message: "Ingresá el nombre de la obra social",
       path: ["obraSocialNombre"],
-    }
-  )
-  .refine(
-    (data) => {
-      if (data.requiereCopago) {
-        return data.montoCopago !== undefined && data.montoCopago !== null && data.montoCopago > 0;
-      }
-      return true;
-    },
-    {
-      message: "Ingresá el monto de copago",
-      path: ["montoCopago"],
     }
   );
 

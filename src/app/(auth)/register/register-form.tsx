@@ -42,14 +42,11 @@ export function RegisterForm() {
       confirmPassword: "",
       tipoCobertura: "PARTICULAR",
       obraSocialNombre: "",
-      requiereCopago: false,
-      montoCopago: undefined,
       esPrimeraVez: true,
     },
   });
 
   const watchCobertura = form.watch("tipoCobertura");
-  const watchCopago = form.watch("requiereCopago");
 
   function onSubmit(values: RegisterInput) {
     startTransition(async () => {
@@ -163,61 +160,6 @@ export function RegisterForm() {
                   </FormItem>
                 )}
               />
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="requiereCopago"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>¿Requiere copago?</FormLabel>
-                      <Select
-                        onValueChange={(val) => field.onChange(val === "yes")}
-                        defaultValue={field.value ? "yes" : "no"}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccioná" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="no">No</SelectItem>
-                          <SelectItem value="yes">Sí</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div
-                  className={cn(
-                    "transition-all duration-300 ease-in-out overflow-hidden",
-                    watchCopago ? "max-h-24 opacity-100" : "max-h-0 opacity-0"
-                  )}
-                >
-                  <FormField
-                    control={form.control}
-                    name="montoCopago"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Monto de Copago</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="Ingresar monto manual"
-                            min={0}
-                            {...field}
-                            value={field.value ?? ""}
-                            onChange={(e) => field.onChange(e.target.valueAsNumber || undefined)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
             </div>
           </div>
 
