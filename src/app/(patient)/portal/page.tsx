@@ -278,7 +278,7 @@ export default async function PortalHomePage() {
 
       {/* Información complementaria */}
       <div className="grid gap-6 md:grid-cols-2 mt-8">
-        <Card className="rounded-[2xl] bg-muted/30 dark:bg-muted/10 border-border/40 dark:border-border">
+        <Card className="rounded-[2rem] bg-muted/30 dark:bg-muted/10 border-border/40 dark:border-border">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base font-bold">
               <Lightbulb className="h-5 w-5 text-amber-500" />
@@ -303,7 +303,7 @@ export default async function PortalHomePage() {
           </CardContent>
         </Card>
         
-        <Card className="rounded-[2xl] border-none overflow-hidden relative shadow-sm group">
+        <Card className="rounded-[2rem] border-none overflow-hidden relative shadow-sm group min-h-[15rem]">
           <div className="absolute inset-0 z-0">
              <Image
                 src="/images/apex-recovery-session.jpeg"
@@ -311,15 +311,18 @@ export default async function PortalHomePage() {
                 fill
                 className="object-cover transition-transform duration-700 group-hover:scale-105"
               />
-             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10"></div>
+             {/* Oscurecido base + degradé inferior fuerte: el texto SIEMPRE legible,
+                 sin importar qué zona de la foto quede detrás. */}
+             <div className="absolute inset-0 bg-black/30"></div>
+             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-transparent"></div>
           </div>
-          <CardContent className="relative z-10 p-6 pt-24 flex flex-col justify-end h-full">
-             <div className="flex items-center gap-2 mb-3 text-secondary dark:text-cyan-400">
+          <CardContent className="relative z-10 p-6 pt-28 flex flex-col justify-end h-full">
+             <div className="flex items-center gap-2 mb-3 text-cyan-300 drop-shadow-md">
                <Activity className="h-4 w-4" />
                <span className="text-xs font-bold uppercase tracking-widest">Recovery Room</span>
              </div>
-             <h3 className="text-white font-bold text-xl leading-tight mb-2">Potenciá tu rendimiento</h3>
-             <p className="text-white/80 text-sm">Consultá con los profesionales por nuestros servicios especializados de recuperación.</p>
+             <h3 className="text-white font-bold text-xl leading-tight mb-2 drop-shadow-md">Potenciá tu rendimiento</h3>
+             <p className="text-white/90 text-sm leading-relaxed drop-shadow-md">Consultá con los profesionales por nuestros servicios especializados de recuperación.</p>
           </CardContent>
         </Card>
       </div>
