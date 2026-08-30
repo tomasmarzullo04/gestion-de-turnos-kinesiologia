@@ -10,6 +10,13 @@ import {
   googleMapsSearchUrl,
 } from "@/lib/studio";
 
+/**
+ * Tarjeta de ubicación del consultorio para Inicio: mini-mapa + dirección +
+ * botón "Cómo llegar". El mapa se muestra en TODAS las pantallas (full-width en
+ * mobile, más alto en sm+). El pin sale de la config central (`coords` con
+ * prioridad, si no la dirección completa con ciudad/provincia), así mobile y
+ * desktop apuntan al MISMO punto. Al tocar (mapa o botón) abre Google Maps.
+ */
 export function LocationMapCard() {
   const mapsUrl = googleMapsSearchUrl();
 
@@ -21,7 +28,7 @@ export function LocationMapCard() {
           Ubicación del consultorio
         </CardTitle>
       </CardHeader>
-      
+
       <CardContent className="p-0 flex-1 flex flex-col">
         <a
           href={mapsUrl}
@@ -31,7 +38,7 @@ export function LocationMapCard() {
           className="relative h-48 sm:h-56 w-full shrink-0 overflow-hidden block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border-b border-border/30"
         >
           <iframe
-            title={`Mapa de ${STUDIO_LOCATION.name} — ${STUDIO_LOCATION.address}`}
+            title={`Mapa de ${STUDIO_LOCATION.name} — ${STUDIO_LOCATION.displayAddress}`}
             src={googleMapsEmbedUrl()}
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
@@ -43,7 +50,7 @@ export function LocationMapCard() {
         <div className="flex flex-col flex-1 p-6 sm:p-8 gap-5 justify-between">
           <div className="space-y-1">
             <p className="font-bold text-xl">{STUDIO_LOCATION.name}</p>
-            <p className="text-muted-foreground">{STUDIO_LOCATION.address}</p>
+            <p className="text-muted-foreground">{STUDIO_LOCATION.displayAddress}</p>
           </div>
 
           <Button asChild className="w-full rounded-full shadow-sm font-medium" variant="secondary">
