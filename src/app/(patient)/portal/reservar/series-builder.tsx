@@ -13,6 +13,7 @@ import {
   ServiceSelector,
   type ServiceOption,
 } from "@/components/features/service-selector";
+import { type ScheduleEntry } from "@/app/(patient)/portal/reservar/service-schedule-hint";
 import { SubmitButton } from "@/components/shared/submit-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,9 +63,10 @@ interface Props {
   restrictedSlugs: string[];
   todayKey: string;
   defaultToDate: string;
+  schedules: Record<string, ScheduleEntry[]>;
 }
 
-export function SeriesBuilder({ services, esPrimeraVez, restrictedSlugs, todayKey, defaultToDate }: Props) {
+export function SeriesBuilder({ services, esPrimeraVez, restrictedSlugs, todayKey, defaultToDate, schedules }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
@@ -150,6 +152,7 @@ export function SeriesBuilder({ services, esPrimeraVez, restrictedSlugs, todayKe
                 services={services}
                 selectedId={service?.id ?? null}
                 onSelect={handleService}
+                schedules={schedules}
               />
             </div>
 

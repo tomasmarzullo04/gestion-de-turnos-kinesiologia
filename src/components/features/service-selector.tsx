@@ -7,7 +7,9 @@ import {
   Heart,
   Sparkles,
   Wind,
+  Zap,
 } from "lucide-react";
+import { type ScheduleEntry } from "@/app/(patient)/portal/reservar/service-schedule-hint";
 import { cn } from "@/lib/utils";
 
 export interface ServiceOption {
@@ -22,6 +24,12 @@ interface Props {
   services: ServiceOption[];
   selectedId: string | null;
   onSelect: (service: ServiceOption) => void;
+  /**
+   * Plantillas activas por servicio (id → franjas). El "cupos/h" del selector
+   * sale de acá (la plantilla manda), NO del `capacity` del servicio. Si un
+   * servicio no tiene plantilla, se muestra un estado neutro en vez de "0/h".
+   */
+  schedules?: Record<string, ScheduleEntry[]>;
 }
 
 const SERVICE_ICONS: Record<string, React.ElementType> = {
@@ -30,6 +38,7 @@ const SERVICE_ICONS: Record<string, React.ElementType> = {
   respi: Wind,
   gym: Dumbbell,
   rehab: Activity,
+  "gym-ranerzzz": Zap,
 };
 
 const SERVICE_DESCRIPTIONS: Record<string, string> = {
@@ -38,15 +47,22 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
   respi: "Rehabilitación respiratoria",
   gym: "Entrenamiento funcional",
   rehab: "Kinesiología",
+  "gym-ranerzzz": "Entrenamiento",
 };
 
-export function ServiceSelector({ services, selectedId, onSelect }: Props) {
+export function ServiceSelector({ services, selectedId, onSelect, schedules }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {services.map((service) => {
         const Icon = SERVICE_ICONS[service.slug] ?? Activity;
         const active = selectedId === service.id;
         const description = SERVICE_DESCRIPTIONS[service.slug] ?? service.name;
+        // "cupos/h" desde la plantilla (la plantilla manda). Sin plantilla →
+        // estado neutro (no "0 cupos/h", que parecería un error/servicio lleno).
+        const entries = schedules?.[service.id] ?? [];
+        const maxCapacity = entries.length
+          ? Math.max(...entries.map((e) => e.capacity))
+          : null;
         return (
           <button
             key={service.id}
@@ -101,22 +117,27 @@ export function ServiceSelector({ services, selectedId, onSelect }: Props) {
               </span>
             )}
 
-            {/* Capacidad */}
-            <span
-              className={cn(
-                "mt-auto inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium transition-colors",
-                active
-                  ? "text-foreground/80"
-                  : "text-muted-foreground",
-              )}
-              style={
-                active
-                  ? { backgroundColor: `${service.color}20` }
-                  : { backgroundColor: "hsl(var(--muted))" }
-              }
-            >
-              {service.capacity} {service.capacity === 1 ? "cupo" : "cupos"}/h
-            </span>
+            {/* Capacidad (desde la plantilla). Neutra si el servicio aún no
+                tiene plantilla cargada. */}
+            {maxCapacity === null ? (
+              <span className="mt-auto text-[0.65rem] italic text-muted-foreground/70">
+                Según disponibilidad
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "mt-auto inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium transition-colors",
+                  active ? "text-foreground/80" : "text-muted-foreground",
+                )}
+                style={
+                  active
+                    ? { backgroundColor: `${service.color}20` }
+                    : { backgroundColor: "hsl(var(--muted))" }
+                }
+              >
+                {maxCapacity} {maxCapacity === 1 ? "cupo" : "cupos"}/h
+              </span>
+            )}
 
             {/* Indicador de selección */}
             {active && (

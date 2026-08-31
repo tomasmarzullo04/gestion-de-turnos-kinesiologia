@@ -383,6 +383,7 @@ export function BookingFlow({
             services={services}
             selectedId={selectedService?.id ?? null}
             onSelect={handleServiceSelect}
+            schedules={schedules}
           />
           {selectedService && !kinesio40 && (
             <ServiceScheduleHint

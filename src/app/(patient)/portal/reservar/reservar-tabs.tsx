@@ -52,6 +52,7 @@ export function ReservarTabs({ services, days, esPrimeraVez, restrictedSlugs, to
           restrictedSlugs={restrictedSlugs}
           todayKey={todayKey}
           defaultToDate={defaultToDate}
+          schedules={schedules}
         />
       </TabsContent>
     </Tabs>
