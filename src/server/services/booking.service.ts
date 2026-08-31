@@ -14,8 +14,10 @@ import {
   classifyFranja,
   firstTimeBlockedMessage,
   firstTimeGridFromFranjas,
+  firstTimeHourlyStarts,
   getFirstTimeRule,
   isFirstTimeDateBlocked,
+  isFirstTimeHourlySlot,
   isFirstTimeSlotAllowed,
   isValidFirstTimeGridSlot,
   type Franja,
@@ -48,6 +50,8 @@ const ERROR_MESSAGES = {
   SLOT_BLOCKED: "Esa franja está cerrada y no admite reservas.",
   BOOKING_NOT_FOUND: "No encontramos la reserva.",
   FORBIDDEN: "No tenés permiso para esta acción.",
+  FIRST_TIME_TAKEN:
+    "Ese horario de primer turno ya está ocupado. Elegí otro horario o día.",
 } as const;
 
 /** Traduce un error de Postgres a un BusinessError con mensaje claro. */
@@ -188,12 +192,26 @@ export const bookingService = {
       }
     }
 
+    // Primer turno HORARIO (14–16 lun/mié/vie): si el paciente es primerizo y la
+    // franja cae en 14:00/15:00, la reserva pasa por `book_slot_first_time` →
+    // ocupa un cupo NORMAL y aplica el tope de 1 primerizo por horario (atómico:
+    // lock del slot + índice único parcial). No-primerizos van por `book_slot`.
+    // (Kine primerizo nunca llega acá: usa el flujo de 40 min / horario propio.)
+    const useFirstTimeCapped =
+      isPrimerizo &&
+      isFirstTimeHourlySlot(slot.service_slug, slot.day_of_week, slot.start_time);
+
     try {
-      // book_slot copia service_id del slot automáticamente (ver función SQL).
-      const rows = await prisma.$queryRaw<{ booking_id: string | null }[]>`
-        SELECT b.id AS booking_id
-        FROM book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
-      `;
+      // book_slot(_first_time) copia service_id del slot automáticamente.
+      const rows = useFirstTimeCapped
+        ? await prisma.$queryRaw<{ booking_id: string | null }[]>`
+            SELECT b.id AS booking_id
+            FROM book_slot_first_time(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+          `
+        : await prisma.$queryRaw<{ booking_id: string | null }[]>`
+            SELECT b.id AS booking_id
+            FROM book_slot(${slotId}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+          `;
 
       // ── Marcar primera vez completada y asignar tratamiento ────────────
       if (esPrimeraVez) {
@@ -621,15 +639,23 @@ export const bookingService = {
     userId: string,
   ): Promise<{
     alreadyBooked: boolean;
-    days: { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[];
+    days: {
+      date: string;
+      turnos: {
+        startTime: string;
+        endTime: string;
+        available: boolean;
+        mode: "40min" | "hourly";
+      }[];
+    }[];
   }> {
     const rule = getFirstTimeRule(KINESIO_SLUG);
     if (!rule?.firstTimeSlotMinutes) return { alreadyBooked: false, days: [] };
     if (await this.hasClearedFirstTime(userId, KINESIO_SLUG)) {
       return { alreadyBooked: false, days: [] };
     }
-    // El especial es una sola vez: si ya tiene un 40 min a futuro, no ofrecemos
-    // la grilla; la UI muestra el mensaje correspondiente.
+    // El especial es una sola vez: si ya tiene un turno de primera vez a futuro,
+    // no ofrecemos la grilla; la UI muestra el mensaje correspondiente.
     if (await this.hasUpcomingFirstTimeKinesioBooking(userId)) {
       return { alreadyBooked: true, days: [] };
     }
@@ -654,6 +680,36 @@ export const bookingService = {
     `;
     const taken = new Set(takenRows.map((r) => `${r.d}|${r.t}`));
 
+    // NUEVO — franja HORARIA (14:00/15:00 lun/mié/vie): slots NORMALES (no
+    // is_first_time). Disponible = con cupo, futuro, no bloqueado y SIN primerizo
+    // anotado (a lo sumo 1 por horario). La reserva ocupa 1 cupo normal.
+    const hourlyRows = await prisma.$queryRaw<
+      { d: string; t: string; e: string; available: boolean }[]
+    >`
+      SELECT to_char(s.date, 'YYYY-MM-DD') AS d,
+             to_char(s.start_time, 'HH24:MI') AS t,
+             to_char(s.end_time, 'HH24:MI') AS e,
+             (
+               NOT s.is_blocked
+               AND s.booked_count < s.capacity
+               AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+               AND NOT EXISTS (
+                 SELECT 1 FROM bookings b
+                 WHERE b.slot_id = s.id AND b.status = 'CONFIRMED' AND b.is_first_time = true
+               )
+             ) AS available
+      FROM slots s
+      WHERE s.service_id = ${serviceId}::uuid
+        AND NOT s.is_first_time
+        AND s.date >= current_date
+        AND extract(dow FROM s.date) IN (1, 3, 5)
+        AND to_char(s.start_time, 'HH24:MI') IN ('14:00', '15:00')
+    `;
+    const hourly = new Map<string, { endTime: string; available: boolean }>();
+    for (const r of hourlyRows) {
+      hourly.set(`${r.d}|${r.t}`, { endTime: r.e, available: r.available });
+    }
+
     // "Ahora" en hora de Argentina, para descartar turnos pasados de hoy.
     const nowRows = await prisma.$queryRaw<{ now_key: string; now_hm: string }[]>`
       SELECT to_char(now() AT TIME ZONE ${TIMEZONE}, 'YYYY-MM-DD') AS now_key,
@@ -665,7 +721,12 @@ export const bookingService = {
     const today = parseLocalDateKey(toLocalDateKey(new Date()));
     const out: {
       date: string;
-      turnos: { startTime: string; endTime: string; available: boolean }[];
+      turnos: {
+        startTime: string;
+        endTime: string;
+        available: boolean;
+        mode: "40min" | "hourly";
+      }[];
     }[] = [];
 
     for (let i = 0; i < BOOKING_CONFIG.generationDays; i++) {
@@ -674,16 +735,36 @@ export const bookingService = {
       // Excepción puntual: fecha bloqueada para el primer turno → no se ofrece.
       // `dateKey` sale de `today` en hora Argentina, así que compara el día local.
       if (isFirstTimeDateBlocked(KINESIO_SLUG, dateKey)) continue;
-      const grid = firstTimeGridFromFranjas(rule, d.getDay(), franjasByDow.get(d.getDay()) ?? []);
-      if (grid.length === 0) continue;
+      const dow = d.getDay();
 
-      const turnos = grid
-        .filter((g) => !(dateKey === nowKey && g.start <= nowHm))
-        .map((g) => ({
+      const turnos: {
+        startTime: string;
+        endTime: string;
+        available: boolean;
+        mode: "40min" | "hourly";
+      }[] = [];
+
+      // 40 min (la grilla ya EXCLUYE 14–16 lun/mié/vie; 16:00+ y mañanas intactos).
+      const grid = firstTimeGridFromFranjas(rule, dow, franjasByDow.get(dow) ?? []);
+      for (const g of grid) {
+        if (dateKey === nowKey && g.start <= nowHm) continue;
+        turnos.push({
           startTime: g.start,
           endTime: g.end,
           available: !taken.has(`${dateKey}|${g.start}`),
-        }));
+          mode: "40min",
+        });
+      }
+
+      // Horario nuevo 14:00/15:00 (solo si existe el slot normal ese día).
+      for (const start of firstTimeHourlyStarts(KINESIO_SLUG, dow)) {
+        if (dateKey === nowKey && start <= nowHm) continue;
+        const h = hourly.get(`${dateKey}|${start}`);
+        if (!h) continue; // la plantilla no cubre esa hora ese día
+        turnos.push({ startTime: start, endTime: h.endTime, available: h.available, mode: "hourly" });
+      }
+
+      turnos.sort((a, b) => a.startTime.localeCompare(b.startTime));
       if (turnos.length > 0) out.push({ date: dateKey, turnos });
     }
     return { alreadyBooked: false, days: out };
@@ -736,10 +817,41 @@ export const bookingService = {
     const serviceId = svc[0]?.id;
     if (!serviceId) throw new BusinessError("Servicio no encontrado.");
 
+    const day = parseLocalDateKey(date);
+
+    // ── Franja HORARIA (14:00/15:00 lun/mié/vie) ──────────────────────────────
+    // El primer turno acá NO es 40 min: reserva el slot NORMAL (por cupo) vía
+    // book_slot_first_time → ocupa 1 cupo y aplica el tope de 1 primerizo por
+    // horario (atómico: lock del slot + índice único parcial).
+    if (isFirstTimeHourlySlot(KINESIO_SLUG, day.getDay(), startTime)) {
+      const slotRows = await prisma.$queryRaw<
+        { id: string; end_time: string; is_future: boolean }[]
+      >`
+        SELECT id,
+               to_char(end_time, 'HH24:MI') AS end_time,
+               (((date + start_time) AT TIME ZONE ${TIMEZONE}) > now()) AS is_future
+        FROM slots
+        WHERE service_id = ${serviceId}::uuid AND NOT is_first_time
+          AND date = ${date}::date AND start_time = ${startTime}::time
+      `;
+      const s = slotRows[0];
+      if (!s) throw new BusinessError("Ese horario no está disponible. Elegí otro.");
+      if (!s.is_future) throw new BusinessError("Ese turno ya pasó. Elegí uno futuro.");
+      try {
+        const booked = await prisma.$queryRaw<{ booking_id: string | null }[]>`
+          SELECT b.id AS booking_id
+          FROM book_slot_first_time(${s.id}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+        `;
+        logger.info("Primer turno de kinesio (horario 14–16) reservado", { userId, date, startTime });
+        return { bookingId: booked[0]?.booking_id ?? null, serviceId, date, startTime, endTime: s.end_time };
+      } catch (error) {
+        rethrowAsBusiness(error);
+      }
+    }
+
     // Autoridad del servidor: el turno debe caer en la grilla INTERSECTADA
     // (franjas reales de la plantilla ∩ parte del día permitida por la regla).
     // Un turno fuera de las franjas de la plantilla se rechaza.
-    const day = parseLocalDateKey(date);
     const franjas = (await this.getTemplateFranjasByDow(serviceId)).get(day.getDay()) ?? [];
     const { valid, endTime } = isValidFirstTimeGridSlot(rule, day.getDay(), franjas, startTime);
     if (!valid || !endTime) {

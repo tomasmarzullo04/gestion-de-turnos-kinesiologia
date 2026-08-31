@@ -35,6 +35,7 @@ import {
   getFirstTimeRule,
   isFirstTimeDateBlocked,
   isFirstTimeDayAllowed,
+  isFirstTimeHourlySlot,
   isFirstTimeSlotAllowed,
   usesIndividualFirstTime,
 } from "@/lib/first-time-rule";
@@ -172,9 +173,16 @@ export function BookingFlow({
     
     const isPrimerizo = esPrimeraVez || (selectedService && restrictedSlugs.includes(selectedService.slug));
     if (isPrimerizo) {
+      const slug = selectedService?.slug;
+      const dow = selectedDate ? parseLocalDateKey(selectedDate).getDay() : -1;
       _slots = _slots.map((slot) => {
         if (slot.firstTimeBlocked) {
           return { ...slot, available: false, isBlocked: true };
+        }
+        // Franja horaria de primer turno (14:00/15:00 lun/mié/vie): máx 1
+        // primerizo. Si ya hay uno anotado, el primerizo no puede reservar ahí.
+        if (slug && isFirstTimeHourlySlot(slug, dow, slot.startTime) && slot.firstTimeTaken) {
+          return { ...slot, available: false };
         }
         return slot;
       });

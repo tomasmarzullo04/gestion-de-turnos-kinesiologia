@@ -21,6 +21,8 @@ interface Turno {
   startTime: string;
   endTime: string;
   available: boolean;
+  /** "40min" = turno individual de 40 min; "hourly" = franja 14–16 por hora. */
+  mode: "40min" | "hourly";
 }
 interface DayAvail {
   date: string;
@@ -166,7 +168,11 @@ export function FirstTimeKinesioBooking() {
                       {t.startTime}–{t.endTime}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {t.available ? "40 min · individual" : "Ocupado"}
+                      {t.available
+                        ? t.mode === "hourly"
+                          ? "1 hora"
+                          : "40 min · individual"
+                        : "Ocupado"}
                     </span>
                   </button>
                 );
@@ -178,7 +184,7 @@ export function FirstTimeKinesioBooking() {
         {selected && (
           <div className="flex items-center justify-between gap-3 border-t pt-4">
             <p className="text-sm text-muted-foreground tabular-nums">
-              {selected.startTime}–{selected.endTime} h · 40 min
+              {selected.startTime}–{selected.endTime} h · {selected.mode === "hourly" ? "1 hora" : "40 min"}
             </p>
             <Button type="button" onClick={confirm} disabled={isPending}>
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}

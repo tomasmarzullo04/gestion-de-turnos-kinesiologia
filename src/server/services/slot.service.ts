@@ -29,6 +29,8 @@ export interface SlotView {
   serviceColor: string | null;
   /** true si hay un bloqueo FIRST_TIME activo (primerizos no pueden reservar). */
   firstTimeBlocked: boolean;
+  /** true si YA hay un primerizo anotado (reserva is_first_time) en esta franja. */
+  firstTimeTaken: boolean;
 }
 
 export interface SlotAttendee {
@@ -57,6 +59,7 @@ interface RawSlot {
   service_color: string | null;
   has_total_block: boolean;
   has_first_time_block: boolean;
+  first_time_taken?: boolean;
 }
 
 function toSlotView(r: RawSlot): SlotView {
@@ -78,6 +81,7 @@ function toSlotView(r: RawSlot): SlotView {
     serviceName: r.service_name,
     serviceColor: r.service_color,
     firstTimeBlocked: r.has_first_time_block,
+    firstTimeTaken: Boolean(r.first_time_taken),
   };
 }
 
@@ -215,7 +219,11 @@ export const slotService = {
                      AND (b.service_id IS NULL OR b.service_id = s.service_id)
                      AND (b.time_from IS NULL OR s.start_time >= b.time_from)
                      AND (b.time_to IS NULL OR s.start_time < b.time_to)
-                 ) AS has_first_time_block
+                 ) AS has_first_time_block,
+                 EXISTS (
+                   SELECT 1 FROM bookings bk
+                   WHERE bk.slot_id = s.id AND bk.status = 'CONFIRMED' AND bk.is_first_time = true
+                 ) AS first_time_taken
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date
@@ -249,7 +257,11 @@ export const slotService = {
                      AND (b.service_id IS NULL OR b.service_id = s.service_id)
                      AND (b.time_from IS NULL OR s.start_time >= b.time_from)
                      AND (b.time_to IS NULL OR s.start_time < b.time_to)
-                 ) AS has_first_time_block
+                 ) AS has_first_time_block,
+                 EXISTS (
+                   SELECT 1 FROM bookings bk
+                   WHERE bk.slot_id = s.id AND bk.status = 'CONFIRMED' AND bk.is_first_time = true
+                 ) AS first_time_taken
           FROM slots s
           LEFT JOIN services sv ON sv.id = s.service_id
           WHERE s.date = ${dateKey}::date

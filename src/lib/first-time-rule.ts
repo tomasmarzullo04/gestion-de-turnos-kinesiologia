@@ -192,6 +192,74 @@ function hmToMinutes(hm: string): number {
 
 const NOON_MINUTES = 12 * 60;
 
+// ── Franja HORARIA de primer turno (14–16, lun/mié/vie; máx 1 primerizo) ──────
+//
+// Modalidad NUEVA y acotada: para el PRIMER turno de Kine y GYM, en la franja
+// 14:00–16:00 de lun/mié/vie, los turnos se ofrecen cada 1 HORA (14:00 y 15:00),
+// con MÁXIMO 1 primerizo por horario, ocupando 1 cupo NORMAL de la plantilla (no
+// un lugar adicional). Fuera de esta franja NO cambia nada: en Kine, 16–20 y las
+// mañanas siguen en turnos de 40 min; GYM sigue por cupo normal.
+export const FIRST_TIME_HOURLY_WINDOW = {
+  /** Servicios (slug estable) que usan la franja horaria de primer turno. */
+  slugs: ["rehab", "gym"] as readonly string[],
+  /** Días (0=Dom…6=Sáb, igual que getDay()). Lun/Mié/Vie. */
+  days: [1, 3, 5] as readonly number[],
+  /** Rango horario [startHour, endHour) sobre la hora de inicio (24h). */
+  startHour: 14,
+  endHour: 16,
+  /** Paso entre turnos (min): 60 → 14:00 y 15:00. */
+  stepMinutes: 60,
+  /** Tope de primerizos por horario. */
+  maxPrimerizos: 1,
+} as const;
+
+/** ¿El servicio usa la franja horaria de primer turno (14–16)? */
+export function isHourlyFirstTimeService(slug: string | null | undefined): boolean {
+  return Boolean(slug) && FIRST_TIME_HOURLY_WINDOW.slugs.includes(slug as string);
+}
+
+/**
+ * Horarios de inicio de primer turno HORARIO para un día ("14:00","15:00"), o
+ * `[]` si el servicio/día no usan la franja horaria.
+ */
+export function firstTimeHourlyStarts(
+  slug: string | null | undefined,
+  dayOfWeek: number,
+): string[] {
+  if (!isHourlyFirstTimeService(slug)) return [];
+  if (!FIRST_TIME_HOURLY_WINDOW.days.includes(dayOfWeek)) return [];
+  const out: string[] = [];
+  const { startHour, endHour, stepMinutes } = FIRST_TIME_HOURLY_WINDOW;
+  for (let m = startHour * 60; m < endHour * 60; m += stepMinutes) {
+    out.push(minutesToHM(m));
+  }
+  return out;
+}
+
+/** ¿`startTime` ("HH:MM") es un horario de primer turno HORARIO ese día? */
+export function isFirstTimeHourlySlot(
+  slug: string | null | undefined,
+  dayOfWeek: number,
+  startTime: string,
+): boolean {
+  return firstTimeHourlyStarts(slug, dayOfWeek).includes(startTime);
+}
+
+/**
+ * ¿La hora de inicio cae DENTRO del rango horario 14–16 (para EXCLUIRla del modo
+ * 40 min)? `hour` es la hora de inicio en 24h. 14 y 15 → true; 16 → false (el
+ * tramo de 40 min de las 16:00 se conserva).
+ */
+export function isInFirstTimeHourlyRange(
+  slug: string | null | undefined,
+  dayOfWeek: number,
+  hour: number,
+): boolean {
+  if (!isHourlyFirstTimeService(slug)) return false;
+  if (!FIRST_TIME_HOURLY_WINDOW.days.includes(dayOfWeek)) return false;
+  return hour >= FIRST_TIME_HOURLY_WINDOW.startHour && hour < FIRST_TIME_HOURLY_WINDOW.endHour;
+}
+
 export type Franja = { start: string; end: string };
 
 /**
@@ -240,6 +308,10 @@ export function firstTimeGridFromFranjas(
     const startM = hmToMinutes(f.start);
     const endM = hmToMinutes(f.end);
     for (let t = startM; t + dur <= endM; t += dur) {
+      // EXCLUSIÓN: el rango 14–16 lun/mié/vie se ofrece por HORA (14:00/15:00),
+      // no en 40 min. Se saltean los inicios que caen dentro de esa franja
+      // (14:00, 14:40, 15:20). El de 16:00 se conserva (16 no está en [14,16)).
+      if (isInFirstTimeHourlyRange(rule.slug, dayOfWeek, Math.floor(t / 60))) continue;
       out.push({ start: minutesToHM(t), end: minutesToHM(t + dur) });
     }
   }

@@ -131,7 +131,15 @@ export async function getMySameDayBookingsAction(
 export async function getFirstTimeKinesioAvailabilityAction(): Promise<
   ActionResult<{
     alreadyBooked: boolean;
-    days: { date: string; turnos: { startTime: string; endTime: string; available: boolean }[] }[];
+    days: {
+      date: string;
+      turnos: {
+        startTime: string;
+        endTime: string;
+        available: boolean;
+        mode: "40min" | "hourly";
+      }[];
+    }[];
   }>
 > {
   try {
