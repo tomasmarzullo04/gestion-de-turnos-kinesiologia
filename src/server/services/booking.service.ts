@@ -718,6 +718,33 @@ export const bookingService = {
     const nowKey = nowRows[0]?.now_key ?? "";
     const nowHm = nowRows[0]?.now_hm ?? "";
 
+    // Bloqueos de la tabla `blocks` (gestor de bloqueos): TOTAL o de PRIMER turno
+    // (FIRST_TIME) impiden ofrecer el turno. Se traen una sola vez y se evalúan en
+    // memoria (fechas "YYYY-MM-DD" y horas "HH:MM" comparan lexicográfico = orden
+    // cronológico). Antes faltaba este filtro → se ofrecían turnos bloqueados.
+    const blockRows = await prisma.$queryRaw<
+      { block_type: string; date_from: string; date_to: string; time_from: string | null; time_to: string | null }[]
+    >`
+      SELECT block_type,
+             date_from::text AS date_from,
+             date_to::text   AS date_to,
+             CASE WHEN time_from IS NOT NULL THEN to_char(time_from, 'HH24:MI') END AS time_from,
+             CASE WHEN time_to   IS NOT NULL THEN to_char(time_to,   'HH24:MI') END AS time_to
+      FROM blocks
+      WHERE deleted_at IS NULL
+        AND block_type IN ('TOTAL', 'FIRST_TIME')
+        AND (service_id IS NULL OR service_id = ${serviceId}::uuid)
+        AND date_to >= current_date
+    `;
+    const isBlockedTurno = (dateKey: string, startTime: string): boolean =>
+      blockRows.some(
+        (b) =>
+          dateKey >= b.date_from &&
+          dateKey <= b.date_to &&
+          (b.time_from === null || startTime >= b.time_from) &&
+          (b.time_to === null || startTime < b.time_to),
+      );
+
     const today = parseLocalDateKey(toLocalDateKey(new Date()));
     const out: {
       date: string;
@@ -751,7 +778,7 @@ export const bookingService = {
         turnos.push({
           startTime: g.start,
           endTime: g.end,
-          available: !taken.has(`${dateKey}|${g.start}`),
+          available: !taken.has(`${dateKey}|${g.start}`) && !isBlockedTurno(dateKey, g.start),
           mode: "40min",
         });
       }
@@ -761,7 +788,12 @@ export const bookingService = {
         if (dateKey === nowKey && start <= nowHm) continue;
         const h = hourly.get(`${dateKey}|${start}`);
         if (!h) continue; // la plantilla no cubre esa hora ese día
-        turnos.push({ startTime: start, endTime: h.endTime, available: h.available, mode: "hourly" });
+        turnos.push({
+          startTime: start,
+          endTime: h.endTime,
+          available: h.available && !isBlockedTurno(dateKey, start),
+          mode: "hourly",
+        });
       }
 
       turnos.sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -816,6 +848,20 @@ export const bookingService = {
     `;
     const serviceId = svc[0]?.id;
     if (!serviceId) throw new BusinessError("Servicio no encontrado.");
+
+    // Bloqueos de la tabla `blocks` (gestor de bloqueos). Este flujo es SIEMPRE
+    // de un primerizo, así que tanto un bloqueo TOTAL como uno de PRIMER turno
+    // (FIRST_TIME) impiden reservar. Autoridad del servidor (falta acá era el
+    // hueco por el que un primerizo entraba pese al bloqueo del profesional).
+    const kineBlock = await blockService.checkSlot(date, startTime, serviceId);
+    if (kineBlock.totalBlocked) {
+      throw new BusinessError("Esa franja está bloqueada y no admite reservas.");
+    }
+    if (kineBlock.firstTimeBlocked) {
+      throw new BusinessError(
+        "Esa franja no está disponible para tu primer turno. Probá con otro horario.",
+      );
+    }
 
     const day = parseLocalDateKey(date);
 
