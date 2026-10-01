@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { TIMEZONE } from "@/lib/constants";
 import { logger } from "@/lib/logger";
@@ -18,6 +19,14 @@ export interface BlockView {
   createdBy: string;
   createdByName: string | null;
   createdAt: string; // ISO
+}
+
+/** Turno YA reservado (futuro) que cae dentro de un bloqueo que se va a crear. */
+export interface AffectedBooking {
+  patientName: string;
+  serviceName: string | null;
+  date: string; // "YYYY-MM-DD"
+  startTime: string; // "HH:mm"
 }
 
 // ── Servicio ───────────────────────────────────────────────────────────────────
@@ -125,6 +134,63 @@ export const blockService = {
       throw new Error("Bloqueo no encontrado o ya fue eliminado");
     }
     logger.info("Bloqueo eliminado", { blockId, deletedBy });
+  },
+
+  /**
+   * Turnos FUTUROS ya reservados (CONFIRMED) que caen DENTRO del alcance de un
+   * bloqueo que se está por crear. Sirve para avisar al profesional: el bloqueo
+   * NO cancela reservas previas (es hacia adelante), así que si ya hay turnos
+   * adentro, él decide si los cancela a mano.
+   *
+   * - TOTAL: cuenta TODOS los turnos del rango (todos quedarían "dentro").
+   * - FIRST_TIME: solo los de PRIMERIZOS (sin asistencia PRESENT en ese
+   *   servicio), que son los únicos a los que ese bloqueo afecta.
+   */
+  async affectedBookings(data: CreateBlockInput): Promise<AffectedBooking[]> {
+    const serviceId = data.serviceId ?? null;
+    const timeFrom = data.timeFrom && data.timeFrom !== "" ? data.timeFrom : null;
+    const timeTo = data.timeTo && data.timeTo !== "" ? data.timeTo : null;
+
+    // FIRST_TIME solo afecta a primerizos (sin PRESENT en ese servicio).
+    const firstTimeFilter =
+      data.blockType === "FIRST_TIME"
+        ? Prisma.sql`
+          AND NOT EXISTS (
+            SELECT 1 FROM bookings b2
+            JOIN attendances a ON a.booking_id = b2.id
+            WHERE b2.user_id = b.user_id
+              AND b2.service_id = s.service_id
+              AND a.status = 'PRESENT'
+          )`
+        : Prisma.empty;
+
+    const rows = await prisma.$queryRaw<
+      { patient_name: string | null; service_name: string | null; date: string; start_time: string }[]
+    >`
+      SELECT u.name AS patient_name,
+             sv.name AS service_name,
+             s.date::text AS date,
+             to_char(s.start_time, 'HH24:MI') AS start_time
+      FROM bookings b
+      JOIN slots s ON s.id = b.slot_id
+      LEFT JOIN services sv ON sv.id = s.service_id
+      LEFT JOIN "User" u ON u.id = b.user_id
+      WHERE b.status = 'CONFIRMED'
+        AND s.date BETWEEN ${data.dateFrom}::date AND ${data.dateTo}::date
+        AND (${serviceId}::uuid IS NULL OR s.service_id = ${serviceId}::uuid)
+        AND (${timeFrom}::time IS NULL OR s.start_time >= ${timeFrom}::time)
+        AND (${timeTo}::time IS NULL OR s.start_time < ${timeTo}::time)
+        AND ((s.date + s.start_time) AT TIME ZONE ${TIMEZONE}) > now()
+        ${firstTimeFilter}
+      ORDER BY s.date, s.start_time
+    `;
+
+    return rows.map((r) => ({
+      patientName: r.patient_name ?? "Paciente",
+      serviceName: r.service_name,
+      date: r.date,
+      startTime: r.start_time,
+    }));
   },
 
   /**

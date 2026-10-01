@@ -48,7 +48,7 @@ import {
   createBlockAction,
   deleteBlockAction,
 } from "@/app/(admin)/actions";
-import type { BlockView } from "@/server/services/block.service";
+import type { AffectedBooking, BlockView } from "@/server/services/block.service";
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 interface ServiceOption {
@@ -102,6 +102,8 @@ export function BloqueosView({ initialBlocks, services }: BloqueosViewProps) {
   const [showCreate, setShowCreate] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<BlockView | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  // Aviso post-creación: turnos ya reservados que caen dentro del bloqueo.
+  const [affected, setAffected] = React.useState<AffectedBooking[] | null>(null);
 
   // ── Formulario de creación ─────────────────────────────────────────────────
   const [serviceId, setServiceId] = React.useState<string | null>(null);
@@ -179,8 +181,14 @@ export function BloqueosView({ initialBlocks, services }: BloqueosViewProps) {
       toast.success("Bloqueo creado");
       setShowCreate(false);
       resetForm();
-      // Refrescar la lista (page revalidation)
-      window.location.reload();
+      const aff = result.data?.affected ?? [];
+      if (aff.length > 0) {
+        // Hay turnos ya reservados dentro: avisamos (el bloqueo NO los canceló).
+        // Al cerrar el aviso se recarga la lista.
+        setAffected(aff);
+      } else {
+        window.location.reload();
+      }
     } else {
       toast.error(result.error);
     }
@@ -499,6 +507,61 @@ export function BloqueosView({ initialBlocks, services }: BloqueosViewProps) {
             >
               {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Crear bloqueo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog de aviso: turnos ya reservados dentro del bloqueo ──── */}
+      <Dialog
+        open={Boolean(affected)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAffected(null);
+            window.location.reload();
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              Hay turnos ya reservados dentro del bloqueo
+            </DialogTitle>
+            <DialogDescription>
+              El bloqueo se creó y evita reservas <strong>nuevas</strong>, pero{" "}
+              <strong>no cancela</strong> los {affected?.length ?? 0} turno
+              {(affected?.length ?? 0) === 1 ? "" : "s"} que ya estaban reservados
+              en ese período. Revisalos y, si corresponde, cancelalos a mano desde
+              Asistencias/Agenda.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border bg-muted/30 p-3">
+            {(affected ?? []).map((a, i) => (
+              <div
+                key={`${a.date}-${a.startTime}-${i}`}
+                className="flex items-center justify-between gap-2 border-b pb-2 text-sm last:border-0 last:pb-0"
+              >
+                <span className="font-medium">{a.patientName}</span>
+                <span className="text-right text-muted-foreground">
+                  {a.serviceName ?? "—"} ·{" "}
+                  <span className="tabular-nums">
+                    {formatDateRange(a.date, a.date)} {a.startTime} hs
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setAffected(null);
+                window.location.reload();
+              }}
+            >
+              Entendido
             </Button>
           </DialogFooter>
         </DialogContent>

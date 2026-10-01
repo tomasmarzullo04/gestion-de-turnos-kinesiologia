@@ -35,7 +35,7 @@ import { patientService } from "@/server/services/patient.service";
 import { professionalService } from "@/server/services/professional.service";
 import { slotService } from "@/server/services/slot.service";
 import { slotTemplateService } from "@/server/services/slot-template.service";
-import { blockService, type BlockView } from "@/server/services/block.service";
+import { blockService, type AffectedBooking, type BlockView } from "@/server/services/block.service";
 import { type ActionResult } from "@/types";
 
 // ── Plantillas (única fuente de verdad: cada cambio re-sincroniza las franjas) ──
@@ -453,13 +453,16 @@ export async function listActiveBlocksAction(): Promise<ActionResult<BlockView[]
 
 export async function createBlockAction(
   input: unknown,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; affected: AffectedBooking[] }>> {
   try {
     const pro = await assertRole(ROLES.ADMIN);
     const data = createBlockSchema.parse(input);
+    // Turnos ya reservados (futuros) que caen dentro del bloqueo: el bloqueo NO
+    // los cancela, así que se los devolvemos a la UI para avisar al profesional.
+    const affected = await blockService.affectedBookings(data);
     const result = await blockService.create(data, pro.id);
     revalidateBlocks();
-    return ok(result);
+    return ok({ id: result.id, affected });
   } catch (error) {
     return fromError(error);
   }
