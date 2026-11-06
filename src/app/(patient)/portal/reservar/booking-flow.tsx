@@ -163,7 +163,13 @@ export function BookingFlow({
         const dayOfWeek = parseLocalDateKey(selectedDate).getDay();
         _slots = _slots.map((slot) => {
           const hour = Number.parseInt(slot.startTime.split(":")[0]!, 10);
-          if (!isFirstTimeSlotAllowed(firstTimeRule, dayOfWeek, hour)) {
+          // Los slots de la franja HORARIA de primer turno (8–12 / 14–16) son un
+          // override propio: se permiten aunque caigan fuera de la ventana
+          // mañana/tarde. El resto sí respeta la ventana de negocio.
+          if (
+            !(slug && isFirstTimeHourlySlot(slug, dayOfWeek, slot.startTime)) &&
+            !isFirstTimeSlotAllowed(firstTimeRule, dayOfWeek, hour)
+          ) {
             return { ...slot, available: false, isBlocked: true };
           }
           return slot;

@@ -14,6 +14,7 @@ import {
   classifyFranja,
   firstTimeBlockedMessage,
   firstTimeGridFromFranjas,
+  firstTimeHourlyAllStarts,
   firstTimeHourlyStarts,
   getFirstTimeRule,
   isFirstTimeDateBlocked,
@@ -186,7 +187,15 @@ export const bookingService = {
             "Tu primer turno de kinesiología es en turnos individuales de 40 minutos. Elegilo desde la lista de turnos disponibles.",
           );
         }
-        if (!isFirstTimeSlotAllowed(rule, slot.day_of_week, slot.start_hour)) {
+        // Franja HORARIA de primer turno (8–12 / 14–16, Lun/Mié/Vie): es un
+        // override propio (no depende de las ventanas mañana/tarde). Si el slot
+        // cae en esa franja, se permite directamente; la grilla de disponibilidad
+        // y el tope de 1 primerizo son la autoridad. Si NO es horaria, se aplica
+        // la ventana de negocio de siempre.
+        if (
+          !isFirstTimeHourlySlot(rule.slug, slot.day_of_week, slot.start_time) &&
+          !isFirstTimeSlotAllowed(rule, slot.day_of_week, slot.start_hour)
+        ) {
           throw new BusinessError(rule.message);
         }
       }
@@ -703,7 +712,7 @@ export const bookingService = {
         AND NOT s.is_first_time
         AND s.date >= current_date
         AND extract(dow FROM s.date) IN (1, 3, 5)
-        AND to_char(s.start_time, 'HH24:MI') IN ('14:00', '15:00')
+        AND to_char(s.start_time, 'HH24:MI') = ANY(${firstTimeHourlyAllStarts()})
     `;
     const hourly = new Map<string, { endTime: string; available: boolean }>();
     for (const r of hourlyRows) {
