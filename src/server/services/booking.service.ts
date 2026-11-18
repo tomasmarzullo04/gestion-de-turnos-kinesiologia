@@ -1015,16 +1015,19 @@ export const bookingService = {
     // individual (flujo de 40 min / franja horaria con tope de 1 primerizo). Si
     // se permitiera acá, un primerizo entraría a slots normales por `book_slot`
     // salteando ese tope. Debe sacarlo desde "Turno único"; recién cuando asista
-    // (cleared) puede reservar turnos fijos. Autoridad del servidor.
-    if (rule && !cleared) {
-      throw new BusinessError(
-        "Tu primer turno no puede reservarse como turno fijo. Sacá tu primer turno desde «Turno único»; después vas a poder reservar turnos fijos.",
-      );
-    }
+    // Primer turno dentro de una serie: el PRIMER turno del paciente (si es
+    // primerizo y el servicio tiene regla) debe respetar el tope de 1 primerizo
+    // por horario. Más abajo, la PRIMERA fecha que se reserva de un primerizo pasa
+    // por `book_slot_first_time` (cupo + tope + marca is_first_time); las
+    // siguientes son turnos recurrentes normales. Así el primerizo PUEDE sacar
+    // turno fijo, pero el primer día tiene que caer en una franja sin otro
+    // primerizo (si no, esa fecha se reporta y se prueba la siguiente).
 
     const recurrenceId = randomUUID();
     const days = new Set(daysOfWeek);
     const results: SeriesItemResult[] = [];
+    // ¿Ya se tomó el "primer turno" (capado) de este primerizo en la serie?
+    let firstTurnBooked = false;
 
     for (let d = today; d <= lastDate; d = addDays(d, 1)) {
       if (!days.has(d.getDay())) continue;
@@ -1050,41 +1053,64 @@ export const bookingService = {
         continue;
       }
 
-      if (rule && !cleared && !isFirstTimeSlotAllowed(rule, slot.dow, slot.hour)) {
+      // ¿Esta fecha es el PRIMER turno (capado) de un primerizo? Solo hasta que
+      // se reserve uno: la primera fecha válida de un primerizo es su primer turno.
+      const isFirstTurnAttempt = rule != null && !cleared && !firstTurnBooked;
+
+      // El primer turno debe caer en una franja válida: franja horaria (override)
+      // o la ventana de negocio. Fuera de eso, no sirve de primer turno.
+      if (
+        isFirstTurnAttempt &&
+        !isFirstTimeHourlySlot(rule!.slug, slot.dow, startTime) &&
+        !isFirstTimeSlotAllowed(rule!, slot.dow, slot.hour)
+      ) {
         results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "rehab_window" });
         continue;
       }
 
-      // Bloqueos de la tabla blocks (grano grueso).
+      // Bloqueos de la tabla blocks (grano grueso). FIRST_TIME aplica al primerizo.
       const seriesBlock = await blockService.checkSlot(
         dateKey,
         startTime,
         serviceId,
       );
-      if (seriesBlock.totalBlocked || (seriesBlock.firstTimeBlocked && esPrimeraVez)) {
+      if (
+        seriesBlock.totalBlocked ||
+        ((seriesBlock.firstTimeBlocked) && rule != null && !cleared)
+      ) {
         results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "no_slot" });
         continue;
       }
 
       try {
-        const booked = await prisma.$queryRaw<{ booking_id: string | null }[]>`
-          SELECT b.id AS booking_id
-          FROM book_slot(${slot.id}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
-        `;
+        // El primer turno del primerizo pasa por book_slot_first_time (tope de 1
+        // primerizo + marca is_first_time). El resto, book_slot normal.
+        const booked = isFirstTurnAttempt
+          ? await prisma.$queryRaw<{ booking_id: string | null }[]>`
+              SELECT b.id AS booking_id
+              FROM book_slot_first_time(${slot.id}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+            `
+          : await prisma.$queryRaw<{ booking_id: string | null }[]>`
+              SELECT b.id AS booking_id
+              FROM book_slot(${slot.id}::uuid, ${userId}::text, ${notes ?? null}::text) AS b
+            `;
         const bookingId = booked[0]?.booking_id ?? null;
         if (bookingId) {
           await prisma.$executeRaw`
             UPDATE bookings SET recurrence_id = ${recurrenceId}::uuid WHERE id = ${bookingId}::uuid
           `;
         }
+        if (isFirstTurnAttempt) firstTurnBooked = true;
         results.push({ date: dateKey, startTime, endTime: slot.end_time, status: "booked" });
       } catch (error) {
         const msg = String((error as { message?: string })?.message ?? error);
-        const status: SeriesItemStatus = msg.includes("SLOT_FULL")
-          ? "full"
-          : msg.includes("ALREADY_BOOKED")
-            ? "already"
-            : "error";
+        const status: SeriesItemStatus = msg.includes("FIRST_TIME_TAKEN")
+          ? "first_time_taken"
+          : msg.includes("SLOT_FULL")
+            ? "full"
+            : msg.includes("ALREADY_BOOKED")
+              ? "already"
+              : "error";
         results.push({ date: dateKey, startTime, endTime: slot.end_time, status });
       }
     }
@@ -1122,6 +1148,7 @@ export type SeriesItemStatus =
   | "full"
   | "already"
   | "rehab_window"
+  | "first_time_taken"
   | "error";
 
 export interface SameDayBooking {
