@@ -1011,6 +1011,17 @@ export const bookingService = {
     const rule = getFirstTimeRule(svc[0]?.slug);
     const cleared = rule ? await this.hasClearedFirstTime(userId, rule.slug) : true;
 
+    // Primer turno NO puede ser un turno fijo (serie): el primer turno es
+    // individual (flujo de 40 min / franja horaria con tope de 1 primerizo). Si
+    // se permitiera acá, un primerizo entraría a slots normales por `book_slot`
+    // salteando ese tope. Debe sacarlo desde "Turno único"; recién cuando asista
+    // (cleared) puede reservar turnos fijos. Autoridad del servidor.
+    if (rule && !cleared) {
+      throw new BusinessError(
+        "Tu primer turno no puede reservarse como turno fijo. Sacá tu primer turno desde «Turno único»; después vas a poder reservar turnos fijos.",
+      );
+    }
+
     const recurrenceId = randomUUID();
     const days = new Set(daysOfWeek);
     const results: SeriesItemResult[] = [];

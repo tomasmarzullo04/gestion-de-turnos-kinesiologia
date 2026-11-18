@@ -103,7 +103,12 @@ export function SeriesBuilder({ services, esPrimeraVez, restrictedSlugs, todayKe
   }
 
   const canSubmit =
-    Boolean(service) && days.length > 0 && Boolean(startTime) && Boolean(toDate);
+    Boolean(service) &&
+    days.length > 0 &&
+    Boolean(startTime) &&
+    Boolean(toDate) &&
+    // El primer turno no puede ser turno fijo (ver banner): se saca desde Turno único.
+    !firstTimeRule;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -137,8 +142,9 @@ export function SeriesBuilder({ services, esPrimeraVez, restrictedSlugs, todayKe
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-950/30">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <p className="text-xs text-amber-800 dark:text-amber-300">
-            Como es tu primer turno, solo se reservarán las fechas dentro de la ventana permitida.
-            {" "}{firstTimeRule.message} El resto se omite.
+            Tu <strong>primer turno</strong> no puede reservarse como turno fijo. Sacá tu primer
+            turno desde la pestaña <strong>«Turno único»</strong>. Una vez que asistas, vas a poder
+            reservar turnos fijos.
           </p>
         </div>
       )}
