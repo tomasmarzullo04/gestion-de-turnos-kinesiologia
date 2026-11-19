@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDateKey, parseLocalDateKey } from "@/lib/datetime";
 import {
   getFirstTimeRule,
+  firstTimeHourlyStarts,
   isFirstTimeDateBlocked,
   isFirstTimeDayAllowed,
   isFirstTimeHourlySlot,
@@ -143,9 +144,14 @@ export function BookingFlow({
     if (!firstTimeRule) return days;
     const slug = selectedService?.slug;
     return days.filter((day) => {
-      if (!isFirstTimeDayAllowed(firstTimeRule, parseLocalDateKey(day.date).getDay())) {
-        return false;
-      }
+      const dow = parseLocalDateKey(day.date).getDay();
+      // Se muestra el día si está en la ventana de negocio O si la franja horaria
+      // de primer turno cubre ese día (ej. Mar/Jue 8–12, que no están en la
+      // ventana pero sí en la franja horaria).
+      const allowed =
+        isFirstTimeDayAllowed(firstTimeRule, dow) ||
+        (slug != null && firstTimeHourlyStarts(slug, dow).length > 0);
+      if (!allowed) return false;
       if (slug && isFirstTimeDateBlocked(slug, day.date)) return false;
       return true;
     });

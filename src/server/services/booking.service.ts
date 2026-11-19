@@ -14,6 +14,7 @@ import {
   classifyFranja,
   firstTimeBlockedMessage,
   firstTimeGridFromFranjas,
+  firstTimeHourlyAllDays,
   firstTimeHourlyAllStarts,
   firstTimeHourlyStarts,
   getFirstTimeRule,
@@ -711,7 +712,7 @@ export const bookingService = {
       WHERE s.service_id = ${serviceId}::uuid
         AND NOT s.is_first_time
         AND s.date >= current_date
-        AND extract(dow FROM s.date) IN (1, 3, 5)
+        AND extract(dow FROM s.date)::int = ANY(${firstTimeHourlyAllDays()})
         AND to_char(s.start_time, 'HH24:MI') = ANY(${firstTimeHourlyAllStarts()})
     `;
     const hourly = new Map<string, { endTime: string; available: boolean }>();
